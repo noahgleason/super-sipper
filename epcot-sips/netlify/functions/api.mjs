@@ -10,6 +10,7 @@
 //   POST   /api/verify           check the family code
 //   POST   /api/unlock           check the refresh password → the claude.ai prompt for manual updates
 //   POST   /api/import           preview (dryRun) or save a menu pasted back from claude.ai
+//   POST   /api/visit/new        archive this visit (tried drinks, ratings, top-3 favorites), then start fresh
 //
 // Optional env vars: FAMILY_CODE (passcode for changes), EPCOT_SIPS_CLAUDE_KEY (your own Anthropic key;
 // enables "Refresh now"), REFRESH_CODE (password for "Refresh now"), AUTO_REFRESH=on (also refresh on a schedule), ANTHROPIC_MODEL, REFRESH_DAYS.
@@ -47,9 +48,10 @@ async function listJSON(s, prefix) {
 async function getState(req) {
   const s = store();
   const today = todayET();
-  const [menus, custom, statuses, members, firstSeen, refresh] = await Promise.all([
+  const [menus, custom, statuses, members, firstSeen, refresh, visit, visits] = await Promise.all([
     readMenus(s), listJSON(s, "custom/"), listJSON(s, "status/"), listJSON(s, "member/"),
     s.get("menu/firstseen", { type: "json" }), readStatus(s),
+    s.get("config/visit", { type: "json" }), listJSON(s, "visits/"),
   ]);
   const { fest, yr } = menus;
   const fid = festivalId(fest.festival);
@@ -97,6 +99,8 @@ async function getState(req) {
     types: TYPES,
     drinks,
     members,
+    visit: visit || { startedAt: null },
+    visits: visits.sort((a, b) => String(b.endedAt).localeCompare(String(a.endedAt))),
     requiresCode: !!process.env.FAMILY_CODE,
   };
 }
@@ -237,6 +241,56 @@ export default async (req) => {
       }
       await s.setJSON("refresh/status", { state: "ok", startedAt: now, finishedAt: now, jobs: [], reason: `uploaded by ${who}`, message: `Manual update · ${saved.join(" · ")}`, manual: true });
       return json({ ok: true, saved: true, preview });
+    }
+
+    if (method === "POST" && path === "visit/new") {
+      if (!refreshAllowed(req)) return json({ error: "Wrong password" }, 403);
+      const st = await getState(req);
+      const byId = Object.fromEntries(st.drinks.map((d) => [d.id, d]));
+      const festName = st.festival?.name ? `${st.festival.name.replace(/^EPCOT\s+(International\s+)?/i, "")} ${st.festival.year || ""}`.trim() : "Year-round";
+      const resolve = (id, it) => {
+        const d = byId[id], sn = it.snap || {};
+        return {
+          id, name: d?.name || sn.name || "A drink", booth: d?.booth || sn.booth || "", price: d?.price || sn.price || "",
+          type: d?.type || sn.type || "cocktail", country: d?.country || sn.country || "park",
+          festival: d ? (d.yearRound ? "Year-round" : festName) : sn.festival || "",
+          rating: it.rating || 0, note: it.note || "", at: it.at || null,
+        };
+      };
+      const archived = st.members.map((m) => ({
+        name: m.name, emoji: m.emoji || "",
+        tried: Object.entries(m.items || {}).filter(([, it]) => it.tried).map(([id, it]) => resolve(id, it)),
+      }));
+      const triedCount = archived.reduce((n, m) => n + m.tried.length, 0);
+      if (!triedCount) return json({ error: "Nobody has tried anything yet, so there's nothing to save." }, 400);
+
+      // Top 3 family favorites for the visit (same ranking as the Family tab).
+      const agg = {};
+      for (const m of archived) for (const t of m.tried) if (t.rating) {
+        const a = (agg[t.id] ||= { name: t.name, booth: t.booth, country: t.country, type: t.type, sum: 0, n: 0 });
+        a.sum += t.rating; a.n++;
+      }
+      const favorites = Object.values(agg).map((a) => ({ name: a.name, booth: a.booth, country: a.country, type: a.type, avg: Math.round(a.sum / a.n * 10) / 10, n: a.n }))
+        .sort((a, b) => b.avg - a.avg || b.n - a.n).slice(0, 3);
+
+      const now = new Date().toISOString();
+      const firstAt = archived.flatMap((m) => m.tried.map((t) => t.at)).filter(Boolean).sort()[0] || now;
+      const startedAt = st.visit?.startedAt && st.visit.startedAt < firstAt ? st.visit.startedAt : firstAt;
+      const id = `v-${now.replace(/[^0-9]/g, "").slice(0, 14)}`;
+      const visitRec = {
+        id, name: clean(body.name, 60) || `${festName} visit`, festival: festName,
+        startedAt, endedAt: now, endedBy: clean(body.member, 24), favorites, members: archived,
+      };
+      await s.setJSON(`visits/${id}`, visitRec);
+
+      // Fresh start: clear check-ins, keep wishlist items nobody has tried yet.
+      for (const m of st.members) {
+        const keep = {};
+        for (const [did, it] of Object.entries(m.items || {})) if (it.want && !it.tried) keep[did] = { want: true, ...(it.snap ? { snap: it.snap } : {}), at: it.at };
+        await s.setJSON(memberKey(m.name), { ...m, items: keep, updated: now });
+      }
+      await s.setJSON("config/visit", { startedAt: now });
+      return json({ ok: true, visit: { id, name: visitRec.name, tried: triedCount, favorites } });
     }
 
     if (method === "POST" && path === "refresh") {

@@ -129,6 +129,11 @@ function memberItems(rec) {
   });
 }
 const festLabel = () => { const f = D().festival; return f?.name ? `${shortFest(f.name)} ${f.year || ""}`.trim() : "Year-round"; };
+const visits = () => D()?.visits || [];
+const sameName = (a, b) => String(a || "").toLowerCase() === String(b || "").toLowerCase();
+// Everything a person tried on earlier (archived) visits.
+const pastTriedFor = (name) => visits().flatMap((v) => (v.members.find((m) => sameName(m.name, name))?.tried || []).map((t) => ({ ...t, visit: v })));
+const fmtDay = (iso) => (iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "");
 const stampsFor = (rec) => new Set(memberItems(rec).filter((x) => x.it.tried && x.country !== "park").map((x) => x.country));
 
 function passesFilters(d) {
@@ -1059,14 +1064,14 @@ function renderList() {
 function renderFamily() {
   const ms = members().map((m) => {
     const items = memberItems(m);
-    return { m, tried: items.filter((x) => x.it.tried).length, stamps: stampsFor(m).size, now: items.filter((x) => x.it.tried && x.current).length };
+    return { m, tried: items.filter((x) => x.it.tried).length + pastTriedFor(m.name).length, stamps: stampsFor(m).size, now: items.filter((x) => x.it.tried && x.current).length };
   }).sort((a, b) => b.now - a.now || b.tried - a.tried);
-  if (!ms.length) return `<div class="empty"><div class="e">${icon("family")}</div><p>No one has checked in yet.<br/>Text this site's link to the family — everyone picks their name on their own phone.</p></div>`;
+  if (!ms.length && !visits().length) return `<div class="empty"><div class="e">${icon("family")}</div><p>No one has checked in yet.<br/>Text this site's link to the family — everyone picks their name on their own phone.</p></div>`;
 
   const rated = D().drinks.map((d) => {
     const rs = familyOn(d.id).map((x) => x.it.rating).filter(Boolean);
     return { d, n: rs.length, avg: rs.length ? rs.reduce((a, b) => a + b, 0) / rs.length : 0 };
-  }).filter((x) => x.n).sort((a, b) => b.avg - a.avg || b.n - a.n).slice(0, 8);
+  }).filter((x) => x.n).sort((a, b) => b.avg - a.avg || b.n - a.n).slice(0, 3);
   const wanted = D().drinks.map((d) => ({ d, n: familyOn(d.id).filter((x) => x.it.want && !x.it.tried).length })).filter((x) => x.n).sort((a, b) => b.n - a.n).slice(0, 6);
   const feed = [];
   for (const m of members()) for (const x of memberItems(m)) if (x.it.at) feed.push({ m, x });
@@ -1080,8 +1085,8 @@ function renderFamily() {
       <div class="leader"><span class="rank">${i + 1}</span>${avatar(x.m.emoji)}
         <div class="who"><b>${esc(x.m.name)}</b><small>${x.stamps} countr${x.stamps === 1 ? "y" : "ies"} stamped · ${x.tried} all-time</small></div>
         <div class="score">${x.now}<small>this menu</small></div></div>`).join("")}</div></div>
-    ${rated.length ? `<div class="card"><h3>${icon("star")}Family favorites</h3><div class="rows">${rated.map((x) => `
-      <div class="leader">${flag(x.d.country)}
+    ${rated.length ? `<div class="card"><h3>${icon("star")}Top 3 family favorites</h3><div class="rows">${rated.map((x, i) => `
+      <div class="leader"><span class="rank medal m${i + 1}">${i + 1}</span>${flag(x.d.country)}
         <div class="who"><b>${esc(x.d.name)}</b><small>${esc(x.d.booth)} · ${x.n} rating${x.n > 1 ? "s" : ""}</small></div>
         <div class="score">${x.avg.toFixed(1)}<small>avg stars</small></div></div>`).join("")}</div></div>` : ""}
     ${wanted.length ? `<div class="card"><h3>${icon("heart")}Most wanted</h3><div class="rows">${wanted.map((x) => `
@@ -1093,7 +1098,23 @@ function renderFamily() {
         <b>${esc(m.name)}</b> ${x.it.tried ? "tried" : "wants"} <b>${esc(x.name)}</b> ${flag(x.country)}
         ${x.it.rating ? ` ${starRow(x.it.rating)}` : ""}
         ${x.it.note ? `<div class="my-note">“${esc(x.it.note)}”</div>` : ""}
-        <time>${ago(x.it.at)}${x.current ? "" : ` · ${esc(x.festival)}`}</time></div></div>`).join("") || `<p class="muted" style="padding:12px 0">Nothing yet.</p>`}</div></div>`;
+        <time>${ago(x.it.at)}${x.current ? "" : ` · ${esc(x.festival)}`}</time></div></div>`).join("") || `<p class="muted" style="padding:12px 0">Nothing yet.</p>`}</div></div>
+    ${visits().length ? `<p class="group-label">${icon("clock")}Past visits</p>${visits().map(visitCard).join("")}` : ""}`;
+}
+
+function visitCard(v) {
+  const people = [...v.members].filter((m) => m.tried.length).sort((a, b) => b.tried.length - a.tried.length);
+  const total = people.reduce((n, m) => n + m.tried.length, 0);
+  return `<div class="card visit-card"><h3>${icon("ticket")}${esc(v.name)}</h3><div class="rows">
+    <p class="visit-meta">${fmtDay(v.startedAt)} – ${fmtDay(v.endedAt)} · ${total} drink${total === 1 ? "" : "s"} tried</p>
+    ${v.favorites?.length ? `<p class="visit-sub">Top 3 favorites</p>${v.favorites.map((f, i) => `
+      <div class="leader"><span class="rank medal m${i + 1}">${i + 1}</span>${flag(f.country)}
+        <div class="who"><b>${esc(f.name)}</b><small>${esc(f.booth)} · ${f.n} rating${f.n > 1 ? "s" : ""}</small></div>
+        <div class="score">${Number(f.avg).toFixed(1)}<small>avg stars</small></div></div>`).join("")}` : ""}
+    <p class="visit-sub">Who tried what</p>
+    ${people.map((m) => `<div class="leader">${avatar(m.emoji)}<div class="who"><b>${esc(m.name)}</b><small>${esc(m.tried.slice(0, 3).map((t) => t.name).join(", "))}${m.tried.length > 3 ? ` +${m.tried.length - 3} more` : ""}</small></div>
+      <div class="score">${m.tried.length}<small>tried</small></div></div>`).join("")}
+  </div></div>`;
 }
 
 const STAMP_INK = ["#f2c46a", "#f59a86", "#a9d4f2", "#b9e3a0", "#e3b5f0"];
@@ -1122,13 +1143,16 @@ function renderPassport() {
   const cs = D().countries.filter((c) => c.pavilion || got.has(c.id) || D().drinks.some((d) => d.country === c.id)).filter((c) => c.id !== "park");
   const byFest = {};
   for (const x of tried) (byFest[x.festival] ||= []).push(x);
+  const past = pastTriedFor(state.me.name);
+  const byVisit = {};
+  for (const t of past) (byVisit[t.visit.id] ||= { v: t.visit, xs: [] }).xs.push(t);
   const spent = tried.filter((x) => x.current).reduce((s, x) => s + (Number.isFinite(priceNum(x.price)) ? priceNum(x.price) : 0), 0);
 
   return `
     <div class="passport">
       <span class="seal">${icon("globe")}</span>
       <div class="passport-head">${avatar(state.me.emoji)}<div><div class="eyebrow">World Showcase Passport</div><h2>${esc(state.me.name)}</h2></div></div>
-      <div class="meta"><span><b>${tried.length}</b>drinks</span><span><b>${got.size}/${cs.length}</b>stamps</span>${spent ? `<span><b>$${spent.toFixed(0)}</b>this menu</span>` : ""}</div>
+      <div class="meta"><span><b>${tried.length}</b>this visit</span>${past.length ? `<span><b>${tried.length + past.length}</b>all-time</span>` : ""}<span><b>${got.size}/${cs.length}</b>stamps</span>${spent ? `<span><b>$${spent.toFixed(0)}</b>this menu</span>` : ""}</div>
       <div class="stamps">${cs.map((c, i) => stampSVG(c, got.has(c.id), i)).join("")}</div>
     </div>
     ${want.length ? `<p class="group-label">${icon("heart")}Want to try (${want.length})</p><div class="drinks">${want.map((x) => drinkCard(x.d, { showWhere: true })).join("")}</div>` : ""}
@@ -1139,7 +1163,14 @@ function renderPassport() {
           <p class="where">${flag(x.country)}${esc(x.booth)} · no longer on the menu</p>
           <div class="chips">${x.it.rating ? `<span class="chip star">${icon("star")}${x.it.rating}</span>` : ""}</div>
           ${x.it.note ? `<p class="my-note">“${esc(x.it.note)}”</p>` : ""}</article>`).join("")}</div>`).join("")
-    || `<div class="empty"><div class="e">${icon("glass")}</div><p>Nothing yet — pick a pavilion on the map and start sipping.</p></div>`}`;
+    || (past.length ? "" : `<div class="empty"><div class="e">${icon("glass")}</div><p>Nothing yet — pick a pavilion on the map and start sipping.</p></div>`)}
+    ${Object.values(byVisit).map(({ v, xs }) => `
+      <p class="group-label">${icon("ticket")}${esc(v.name)} (${xs.length})</p>
+      <div class="drinks">${xs.sort((a, b) => (b.rating || 0) - (a.rating || 0)).map((t) => `
+        <article class="drink tried past"><div class="drink-top"><span class="drink-type">${icon(TYPE_ICON[t.type] || "glass")}</span><div class="drink-title"><h4>${esc(t.name)}</h4></div><span class="price">${esc(t.price)}</span></div>
+          <p class="where">${flag(t.country)}${esc(t.booth)} · ${fmtDay(t.at || v.endedAt)}</p>
+          ${t.rating ? `<div class="chips"><span class="chip star">${icon("star")}${t.rating}</span></div>` : ""}
+          ${t.note ? `<p class="my-note">“${esc(t.note)}”</p>` : ""}</article>`).join("")}</div>`).join("")}`;
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -1279,6 +1310,12 @@ function infoSheet() {
       <label class="field"><span>Password</span><input id="adminCode" type="password" autocomplete="off" value="${esc(ls.get(LS.rcode, ""))}" placeholder="Menu password" /></label>
       <button class="btn accent block" id="unlock">${icon("lock")}Unlock</button>`}
 
+    ${unlocked ? `
+      <p class="group-label">${icon("ticket")}Start a new visit</p>
+      <p class="muted" style="font-size:.86rem">Saves this visit — everyone's tried drinks, ratings, notes and the top 3 family favorites — to the Family and Passport history, then clears check-ins so the whole family starts fresh. Wishlists carry over.</p>
+      <label class="field"><span>Name this visit</span><input id="visitName" maxlength="60" value="${esc(suggestVisitName())}" /></label>
+      <button class="btn block danger-outline" id="newVisit">${icon("refresh")}Save &amp; start a new visit</button>` : ""}
+
     ${st.enabled ? `
       <p class="group-label">${icon("bolt")}Automatic research</p>
       <p class="muted" style="font-size:.84rem">${st.auto ? `On — re-checks every ${st.everyDays} days, plus the day a festival starts or ends.` : "Uses the API key set in Netlify. Only runs when you tap the button."}</p>
@@ -1341,11 +1378,30 @@ function infoSheet() {
     };
     $("#checkImport", el)?.addEventListener("click", check);
 
+    $("#newVisit", el)?.addEventListener("click", async (ev) => {
+      const b = ev.currentTarget;
+      if (!b.dataset.armed) { b.dataset.armed = "1"; b.innerHTML = `${icon("alert")}Tap again to save &amp; clear everyone's check-ins`; b.classList.add("armed"); setTimeout(() => { if (b.isConnected) { delete b.dataset.armed; b.classList.remove("armed"); b.innerHTML = `${icon("refresh")}Save &amp; start a new visit`; } }, 5000); return; }
+      b.disabled = true;
+      try {
+        const out = await api("visit/new", { method: "POST", body: { name: $("#visitName", el).value, member: state.me?.name }, headers: { "x-refresh-code": admin.code } });
+        closeSheet(); await load();
+        toast(`Saved "${out.visit.name}" (${out.visit.tried} drinks). Fresh start!`);
+      } catch (e) { b.disabled = false; toast(e.message); }
+    });
+
     $("#refreshNow", el)?.addEventListener("click", async () => {
       try { await api("refresh", { method: "POST", body: { member: state.me?.name }, headers: { "x-refresh-code": admin.code } }); toast("Researching the latest menus… check back in a few minutes"); closeSheet(); setTimeout(() => load({ quiet: true }), 3000); }
       catch (e) { toast(e.message); }
     });
   });
+}
+
+function suggestVisitName() {
+  const ats = members().flatMap((m) => Object.values(m.items || {}).filter((it) => it.tried).map((it) => it.at)).filter(Boolean).sort();
+  const from = D().visit?.startedAt && (!ats[0] || D().visit.startedAt < ats[0]) ? D().visit.startedAt : ats[0];
+  const md = (iso) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const range = from ? (md(from) === md(new Date().toISOString()) ? md(from) : `${md(from)} – ${md(new Date().toISOString())}`) : "";
+  return `${festLabel()}${range ? ` · ${range}` : ""}`;
 }
 
 function importPreview(p, ok) {
