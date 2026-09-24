@@ -5,6 +5,12 @@ import { ANCHOR_IDS, COUNTRY_IDS, COUNTRY_HOME, TYPES } from "../../data/places.
 
 export const store = () => getStore({ name: "epcot-sips", consistency: "strong" });
 
+// Claude is only ever called with a key you set yourself, under a name only this app uses.
+// Netlify's AI Gateway silently injects ANTHROPIC_API_KEY (billed to Netlify credits), so that name is ignored.
+export const claudeKey = () => (process.env.EPCOT_SIPS_CLAUDE_KEY || "").trim();
+// Automatic refreshes (daily check + "menu is overdue" on app open) also need an explicit opt-in.
+export const autoRefreshOn = () => !!claudeKey() && String(process.env.AUTO_REFRESH || "").trim().toLowerCase() === "on";
+
 export const REFRESH_DAYS = () => Math.max(1, Number(process.env.REFRESH_DAYS) || 3);
 export const YEAR_ROUND_DAYS = 21;
 
@@ -146,7 +152,8 @@ export async function readStatus(s = store()) {
  * Skips if a run started recently, or (for automatic triggers) if one failed recently.
  */
 export async function triggerRefresh({ siteUrl, jobs, reason, manual = false }) {
-  if (!process.env.ANTHROPIC_API_KEY) return { started: false, why: "ANTHROPIC_API_KEY is not set" };
+  if (!claudeKey()) return { started: false, why: "EPCOT_SIPS_CLAUDE_KEY is not set" };
+  if (!manual && !autoRefreshOn()) return { started: false, why: "automatic refresh is off (set AUTO_REFRESH=on to allow it)" };
   if (!jobs?.length) return { started: false, why: "nothing due" };
   const s = store();
   const st = await readStatus(s);

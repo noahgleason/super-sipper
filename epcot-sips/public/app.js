@@ -1185,12 +1185,12 @@ function infoSheet() {
       ${nf?.name ? `<dt>Next up</dt><dd>${esc(nf.name)}${nf.starts ? ` · ${fmtDate(nf.starts)}` : ""}</dd>` : ""}
       <dt>Festival menu</dt><dd>checked ${ago(menu.checkedAt)}${menu.origin === "seed" ? " (starter menu)" : ""}</dd>
       <dt>Year-round</dt><dd>${menu.yearRoundCheckedAt ? `checked ${ago(menu.yearRoundCheckedAt)}` : "not researched yet"}</dd>
-      <dt>Auto-refresh</dt><dd>${st.auto ? `On — re-checks every ${st.everyDays} days, plus the day a festival starts or ends` : "Off (add ANTHROPIC_API_KEY in Netlify to turn on)"}</dd>
+      <dt>Auto-refresh</dt><dd>${st.auto ? `On — re-checks every ${st.everyDays} days, plus the day a festival starts or ends` : st.enabled ? "Off — the menu only updates when you tap the button below" : "Off — add EPCOT_SIPS_CLAUDE_KEY in Netlify to allow refreshes"}</dd>
       <dt>Last run</dt><dd>${st.state === "never" ? "—" : `${esc(st.state)} ${ago(st.finishedAt || st.startedAt)}${st.message ? `<br><span class="muted">${esc(st.message)}</span>` : ""}`}</dd>
     </dl>
     ${src ? `<p class="group-label">Sources</p>${src}` : ""}
     <div style="height:14px"></div>
-    ${st.auto ? `<button class="btn accent block" id="refreshNow" ${busy ? "disabled" : ""}>${busy ? "Updating… (takes a few minutes)" : `${icon("refresh")}Refresh the menu now`}</button>` : ""}
+    ${st.enabled ? `<button class="btn accent block" id="refreshNow" ${busy ? "disabled" : ""}>${busy ? "Updating… (takes a few minutes)" : `${icon("refresh")}Refresh the menu now`}</button>` : ""}
     <p class="muted" style="font-size:.78rem;margin-top:12px">Menus are researched from Disney's announcements and trusted Disney news sites. Prices can change at the booth — if something's off, fix it from the drink's ••• menu or add it with ＋.</p>
   `, (el) => {
     $("#refreshNow", el)?.addEventListener("click", async () => {

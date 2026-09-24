@@ -2,9 +2,10 @@
 // then a second call converts the findings into strict JSON the app can trust.
 import { Agent, fetch as ufetch } from "undici";
 import { ANCHORS, ANCHOR_IDS, COUNTRIES, COUNTRY_IDS, TYPES } from "../../data/places.mjs";
-import { cleanBooths, todayET } from "./menu.mjs";
+import { cleanBooths, todayET, claudeKey } from "./menu.mjs";
 
-const API = `${process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com"}/v1/messages`;
+// Always Anthropic directly — never a base URL injected by the host (e.g. Netlify's AI Gateway).
+const API = "https://api.anthropic.com/v1/messages";
 const MODEL = () => process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
 // Long research calls can take minutes before the first byte — don't let Node time out.
 const dispatcher = new Agent({ headersTimeout: 0, bodyTimeout: 0, connectTimeout: 30_000 });
@@ -24,7 +25,7 @@ async function claude(body, { tries = 4 } = {}) {
       dispatcher,
       headers: {
         "content-type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY,
+        "x-api-key": claudeKey(),
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify(body),
@@ -46,11 +47,11 @@ async function claude(body, { tries = 4 } = {}) {
 async function research(system, prompt, { maxSearches = 14, maxFetches = 10 } = {}) {
   const tools = [
     { type: "web_search_20260318", name: "web_search", max_uses: maxSearches, allowed_domains: SOURCES },
-    { type: "web_fetch_20260318", name: "web_fetch", max_uses: maxFetches, max_content_tokens: 40000 },
+    { type: "web_fetch_20260318", name: "web_fetch", max_uses: maxFetches, max_content_tokens: 15000 },
   ];
   const messages = [{ role: "user", content: prompt }];
   let last;
-  for (let turn = 0; turn < 8; turn++) {
+  for (let turn = 0; turn < 4; turn++) {
     last = await claude({ model: MODEL(), max_tokens: 24000, system, tools, messages });
     if (last.stop_reason !== "pause_turn") break;
     messages.push({ role: "assistant", content: last.content });

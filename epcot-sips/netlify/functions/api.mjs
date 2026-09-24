@@ -9,12 +9,12 @@
 //   POST   /api/refresh          re-research the menu now
 //   POST   /api/verify           check the family code
 //
-// Optional env vars: FAMILY_CODE (passcode for changes), ANTHROPIC_API_KEY (turns on auto-refresh),
-// ANTHROPIC_MODEL, REFRESH_DAYS.
+// Optional env vars: FAMILY_CODE (passcode for changes), EPCOT_SIPS_CLAUDE_KEY (your own Anthropic key;
+// enables "Refresh now"), AUTO_REFRESH=on (also refresh on a schedule), ANTHROPIC_MODEL, REFRESH_DAYS.
 
 import { ANCHORS, COUNTRIES, COUNTRY_IDS, RING, TYPES } from "../../data/places.mjs";
 import {
-  store, readMenus, flatten, festivalId, todayET, dueJobs, triggerRefresh, readStatus, REFRESH_DAYS, daysBetween,
+  store, readMenus, flatten, festivalId, todayET, dueJobs, triggerRefresh, readStatus, REFRESH_DAYS, daysBetween, claudeKey, autoRefreshOn,
 } from "../lib/menu.mjs";
 
 const json = (data, status = 200) =>
@@ -47,7 +47,7 @@ async function getState(req) {
   // Self-healing: if the scheduled check hasn't refreshed an overdue menu, start it now.
   const due = dueJobs(menus);
   let autoTrigger = null;
-  if (due.jobs.length && process.env.ANTHROPIC_API_KEY) {
+  if (due.jobs.length && autoRefreshOn()) {
     autoTrigger = await triggerRefresh({ siteUrl: new URL(req.url).origin, ...due }).catch((e) => ({ started: false, why: e.message }));
   }
 
@@ -75,7 +75,8 @@ async function getState(req) {
     },
     refresh: {
       ...refresh,
-      auto: !!process.env.ANTHROPIC_API_KEY,
+      enabled: !!claudeKey(),
+      auto: autoRefreshOn(),
       everyDays: REFRESH_DAYS(),
       due: due.jobs, dueReason: due.reason, autoTrigger,
     },

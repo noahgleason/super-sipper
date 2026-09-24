@@ -48,20 +48,29 @@ npx netlify-cli login
 npx netlify-cli deploy --build --prod
 ```
 
-### Turn on auto-refresh (required for "always current")
+### Menu refreshes (you choose when Claude runs)
+The app never calls Claude on its own unless you say so:
+
+- **No key set:** Claude is never called. The app uses the starter menu.
+- **`EPCOT_SIPS_CLAUDE_KEY` set:** the menu updates only when someone taps **Refresh the menu now**.
+- **`EPCOT_SIPS_CLAUDE_KEY` + `AUTO_REFRESH=on`:** it also refreshes on its own (daily check, and when someone opens an overdue menu).
+
+The app deliberately ignores `ANTHROPIC_API_KEY` and `ANTHROPIC_BASE_URL`. Netlify's AI Gateway injects those into functions automatically and bills the usage to your Netlify credits; this app always calls `api.anthropic.com` with your own key instead.
+
 1. Get an API key at https://console.anthropic.com. Consider setting a monthly spend limit there.
 2. In Netlify, go to **Site configuration → Environment variables** and add the ones you need:
 
 | Key | Value | |
 | --- | --- | --- |
-| `ANTHROPIC_API_KEY` | `sk-ant-…` | **Required** for auto-refresh |
+| `EPCOT_SIPS_CLAUDE_KEY` | `sk-ant-…` | **Required** for any refresh |
+| `AUTO_REFRESH` | `on` | Optional. Leave unset for manual-only refreshes |
 | `FAMILY_CODE` | e.g. `figment` | Optional passcode for making changes |
 | `REFRESH_DAYS` | `3` | Optional. How often to re-check mid-festival |
 | `ANTHROPIC_MODEL` | `claude-sonnet-5` | Optional model override |
 
-3. Redeploy. Then open the app, tap the festival name at the top, and tap **Refresh the menu now**. The first full research run takes a few minutes.
+3. Redeploy. Then open the app, tap the festival name at the top, and tap **Refresh the menu now**. Set `FAMILY_CODE` too, or anyone with the link can start a refresh. The first full research run takes a few minutes.
 
-**Cost:** each refresh runs a web-research session (up to ~26 searches and page reads) followed by a formatting pass. At the default schedule that's roughly 10–12 refreshes a month, and the exact cost depends on the model and how many pages it reads. Check your usage in the Anthropic Console after the first run and set a spend limit you're comfortable with. Raising `REFRESH_DAYS` makes it cheaper.
+**Cost:** each refresh runs a web-research session (up to ~26 searches and page reads) followed by a formatting pass. With `AUTO_REFRESH=on` at the default schedule that's roughly 10–12 refreshes a month, and the exact cost depends on the model and how many pages it reads. Check your usage in the Anthropic Console after the first run and set a spend limit you're comfortable with. Raising `REFRESH_DAYS` makes it cheaper.
 
 Without the key, the app still works using the starter menu (2026 Food & Wine, current as of Sept 24, 2026), but it won't update itself.
 
