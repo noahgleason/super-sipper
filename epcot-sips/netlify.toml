@@ -1,0 +1,23 @@
+[build]
+  publish = "public"
+  functions = "netlify/functions"
+  command = "echo 'No build step needed'"
+
+[functions]
+  node_bundler = "esbuild"
+  included_files = ["data/**"]
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+# Functions run on Node 22 (undici needs Node 20.18+)
+[build.environment]
+  NODE_VERSION = "22"

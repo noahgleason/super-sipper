@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+  <title>Epcot Sips</title>
+  <meta name="description" content="Our family's drink passport for EPCOT — always-current festival menus on a live park map" />
+  <meta name="theme-color" content="#0b1230" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Epcot Sips" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/icon-180.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,800;1,9..144,600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body data-tab="map">
+  <header class="top">
+    <button class="fest" id="festBtn" aria-label="Festival and menu info">
+      <span class="fest-name" id="festName">Loading…</span>
+      <span class="fest-meta" id="festMeta"></span>
+    </button>
+    <button id="meBtn" class="me-chip" aria-label="Your profile"><span id="meEmoji">👋</span><span id="meName">Join</span></button>
+  </header>
+
+  <!-- MAP -->
+  <section id="mapView" class="map-view" aria-label="EPCOT map">
+    <svg id="map" role="img" aria-label="Map of EPCOT with drink locations"></svg>
+    <div class="map-ui">
+      <div class="layer-row" id="layerRow"></div>
+    </div>
+    <div class="map-tools">
+      <button class="tool" id="locBtn" aria-label="Show where I am">◎</button>
+      <button class="tool" id="fitBtn" aria-label="Reset map">⤢</button>
+    </div>
+    <div class="compass" aria-hidden="true"><span>N</span>↓</div>
+    <div id="drawer" class="drawer" data-state="peek">
+      <button class="drawer-grip" id="drawerGrip" aria-label="Expand or collapse"></button>
+      <div id="drawerBody" class="drawer-body"></div>
+    </div>
+  </section>
+
+  <!-- OTHER VIEWS -->
+  <main id="view" class="view" tabindex="-1"></main>
+
+  <button id="addBtn" class="fab" aria-label="Add a drink the menu is missing">＋</button>
+
+  <nav class="tabs" aria-label="Sections">
+    <button data-tab="map"><span class="ti">🗺️</span>Map</button>
+    <button data-tab="list"><span class="ti">📜</span>List</button>
+    <button data-tab="family"><span class="ti">👨‍👩‍👧‍👦</span>Family</button>
+    <button data-tab="passport"><span class="ti">🎟️</span>Passport</button>
+  </nav>
+
+  <div id="sheet" class="sheet" hidden>
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-card" role="dialog" aria-modal="true">
+      <div class="sheet-grip"></div>
+      <div id="sheetBody"></div>
+    </div>
+  </div>
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <script src="/app.js" type="module"></script>
+</body>
+</html>
