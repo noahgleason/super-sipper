@@ -148,6 +148,8 @@ export default async (req) => {
       if ("want" in body) next.want = !!body.want;
       if ("rating" in body) next.rating = Math.max(0, Math.min(5, Number(body.rating) || 0));
       if ("note" in body) next.note = clean(body.note, 280);
+      if ("qty" in body) next.qty = Math.max(1, Math.min(20, Math.round(Number(body.qty) || 1)));
+      if ("size" in body) next.size = Math.max(0, Math.min(5, Math.round(Number(body.size) || 0)));
       if (next.rating > 0) next.tried = true;
       // A snapshot keeps your passport readable after the festival (and its menu) moves on.
       if (body.snapshot && typeof body.snapshot === "object") {
@@ -254,7 +256,7 @@ export default async (req) => {
           id, name: d?.name || sn.name || "A drink", booth: d?.booth || sn.booth || "", price: d?.price || sn.price || "",
           type: d?.type || sn.type || "cocktail", country: d?.country || sn.country || "park",
           festival: d ? (d.yearRound ? "Year-round" : festName) : sn.festival || "",
-          rating: it.rating || 0, note: it.note || "", at: it.at || null,
+          rating: it.rating || 0, note: it.note || "", at: it.at || null, qty: it.qty || 1, size: it.size || 0,
         };
       };
       const archived = st.members.map((m) => ({
