@@ -1,6 +1,6 @@
 // Background worker (runs up to 15 minutes): researches the current menus and saves them.
 // Triggered by the daily scheduled check, by the app when a refresh is overdue, or by "Refresh now".
-import { store, readMenus, refreshSecret, readStatus, todayET, flatten, festivalId } from "../lib/menu.mjs";
+import { store, readMenus, refreshSecret, readStatus, flatten, festivalId, markFirstSeen } from "../lib/menu.mjs";
 import { researchFestival, researchYearRound } from "../lib/research.mjs";
 
 export default async (req) => {
@@ -39,14 +39,5 @@ export default async (req) => {
   }
   return new Response("done");
 };
-
-// Remember the day each drink first appeared, so the app can badge "New".
-async function markFirstSeen(s, drinks) {
-  const seen = (await s.get("menu/firstseen", { type: "json" })) || {};
-  const today = todayET();
-  let changed = false;
-  for (const d of drinks) if (!seen[d.id]) { seen[d.id] = today; changed = true; }
-  if (changed) await s.setJSON("menu/firstseen", seen);
-}
 
 export const config = { path: "/internal/refresh", background: true };

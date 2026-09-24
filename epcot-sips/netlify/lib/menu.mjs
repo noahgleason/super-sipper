@@ -171,3 +171,12 @@ export async function triggerRefresh({ siteUrl, jobs, reason, manual = false }) 
   });
   return { started: res.status < 300, status: res.status, jobs };
 }
+
+// Remember the day each drink first appeared, so the app can badge "New".
+export async function markFirstSeen(s, drinks) {
+  const seen = (await s.get("menu/firstseen", { type: "json" })) || {};
+  const today = todayET();
+  let changed = false;
+  for (const d of drinks) if (!seen[d.id]) { seen[d.id] = today; changed = true; }
+  if (changed) await s.setJSON("menu/firstseen", seen);
+}

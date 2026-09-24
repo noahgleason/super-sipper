@@ -48,7 +48,15 @@ npx netlify-cli login
 npx netlify-cli deploy --build --prod
 ```
 
-### Menu refreshes (you choose when Claude runs)
+### Update the menu by hand (no API key, no cost to the site)
+1. In the app, tap the **gear** (Settings) and enter the menu password (`REFRESH_CODE`).
+2. Tap **Copy prompt** and paste it into a new chat at claude.ai with web search on. The prompt already includes today's date and every map spot, country and drink type the app accepts.
+3. Save Claude's JSON reply as a file (or copy the whole reply), then upload or paste it under **Upload the reply** and tap **Check it**.
+4. The app shows what it found (festival, dates, booth and drink counts) and anything it had to fix. Tap **Update the map** to publish it for everyone.
+
+It never replaces a menu with a thin one: the festival needs at least 15 drinks and the year-round list at least 10. The previous festival menu is kept in storage as a backup.
+
+### Menu refreshes with an API key (you choose when Claude runs)
 The app never calls Claude on its own unless you say so:
 
 - **No key set:** Claude is never called. The app uses the starter menu.
@@ -64,7 +72,7 @@ The app deliberately ignores `ANTHROPIC_API_KEY` and `ANTHROPIC_BASE_URL`. Netli
 | --- | --- | --- |
 | `EPCOT_SIPS_CLAUDE_KEY` | `sk-ant-…` | **Required** for any refresh |
 | `AUTO_REFRESH` | `on` | Optional. Leave unset for manual-only refreshes |
-| `REFRESH_CODE` | a password | Optional. Required to tap **Refresh the menu now** (the phone remembers it after one correct try) |
+| `REFRESH_CODE` | a password | Password for Settings: manual menu uploads and API refreshes (the phone remembers it after one correct try) |
 | `FAMILY_CODE` | e.g. `figment` | Optional passcode for making changes |
 | `REFRESH_DAYS` | `3` | Optional. How often to re-check mid-festival |
 | `ANTHROPIC_MODEL` | `claude-sonnet-5` | Optional model override |

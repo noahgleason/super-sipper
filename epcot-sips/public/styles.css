@@ -112,6 +112,8 @@ input, select, textarea { font: inherit; color: inherit; }
 .fresh.stale::before { background: var(--accent-2); box-shadow: 0 0 0 2px rgba(201,152,46,.3); }
 .fresh.busy::before { animation: blink 1s infinite; }
 @keyframes blink { 50% { opacity: .2; } }
+.hdr-btn { flex: none; width: 38px; height: 38px; display: grid; place-items: center; background: var(--chrome-2); border: 1px solid var(--chrome-line); color: var(--chrome-ink); border-radius: var(--r); }
+.hdr-btn .i { width: 20px; height: 20px; }
 .me-chip {
   display: flex; align-items: center; gap: 8px; flex: none;
   background: var(--chrome-2); border: 1px solid var(--chrome-line); color: var(--chrome-ink);
@@ -391,6 +393,33 @@ body[data-tab="map"] .tabs [data-tab="map"]::before, body[data-tab="list"] .tabs
 .kv dd { margin: 0; }
 .src { font-size: .8rem; word-break: break-all; color: var(--ink-2); padding: 3px 0; }
 .src a { color: inherit; }
+/* Settings: manual menu update */
+.steps { list-style: none; margin: 8px 0 0; padding: 0; counter-reset: step; }
+.steps > li { counter-increment: step; position: relative; padding: 0 0 18px 40px; }
+.steps > li::before { content: counter(step); position: absolute; left: 0; top: 0; width: 26px; height: 26px; display: grid; place-items: center; background: var(--ink); color: var(--surface); font-family: var(--display); font-weight: 800; font-size: .95rem; }
+.steps > li:not(:last-child)::after { content: ""; position: absolute; left: 12px; top: 30px; bottom: 4px; width: 2px; background: var(--line); }
+.steps b { display: block; font-family: var(--display); font-size: 1.05rem; letter-spacing: .06em; text-transform: uppercase; line-height: 26px; }
+.steps p { margin: 2px 0 10px; font-size: .86rem; color: var(--ink-2); }
+.btn-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.btn-row a.btn { text-decoration: none; color: inherit; }
+details.prompt-peek { margin-top: 8px; }
+details.prompt-peek summary { font-size: .8rem; color: var(--ink-3); cursor: pointer; }
+.mono { width: 100%; min-height: 150px; font: 12px/1.45 ui-monospace, "SF Mono", Menlo, monospace; padding: 10px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--bg); resize: vertical; margin-top: 6px; }
+.drop { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 18px 12px; border: 2px dashed var(--line-2); border-radius: var(--r); background: var(--surface-2); text-align: center; font-size: .86rem; color: var(--ink-2); cursor: pointer; }
+.drop .i { width: 28px; height: 28px; color: var(--accent); }
+.drop b { font-family: var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--ink); font-size: 1rem; }
+.drop.over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface-2)); }
+.drop input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.import-card h3.bad { background: #b8322a; color: #fff; }
+.import-card .rows { padding: 4px 14px 14px; }
+.import-card ul { margin: 6px 0 0; padding-left: 18px; font-size: .84rem; color: var(--ink-2); }
+.import-card .errs li { color: #b8322a; font-weight: 600; }
+.imp-row { display: flex; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); font-size: .88rem; }
+.imp-row:first-child { border-top: 0; }
+.imp-row .i { width: 22px; height: 22px; color: var(--accent); margin-top: 1px; }
+.imp-row b { display: block; }
+.imp-row small { color: var(--ink-3); }
+details.srcs summary { font-family: var(--display); font-weight: 700; letter-spacing: .14em; text-transform: uppercase; font-size: .78rem; color: var(--ink-2); cursor: pointer; margin: 8px 0; }
 @keyframes up { from { transform: translateY(40px); opacity: 0; } }
 @keyframes fade { from { opacity: 0; } }
 .toast { position: fixed; left: 50%; bottom: calc(var(--tabbar) + env(safe-area-inset-bottom) + 140px); transform: translateX(-50%); background: var(--chrome); color: var(--chrome-ink); padding: 11px 16px; border-radius: var(--r); border-left: 4px solid var(--accent); font-size: .9rem; font-weight: 600; z-index: 70; box-shadow: 0 8px 24px rgba(0,0,0,.3); max-width: calc(100% - 32px); text-align: center; }

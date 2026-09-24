@@ -8,14 +8,17 @@
 //   POST   /api/status           mark a drink sold out today (clears itself tomorrow)
 //   POST   /api/refresh          re-research the menu now
 //   POST   /api/verify           check the family code
+//   POST   /api/unlock           check the refresh password → the claude.ai prompt for manual updates
+//   POST   /api/import           preview (dryRun) or save a menu pasted back from claude.ai
 //
 // Optional env vars: FAMILY_CODE (passcode for changes), EPCOT_SIPS_CLAUDE_KEY (your own Anthropic key;
 // enables "Refresh now"), REFRESH_CODE (password for "Refresh now"), AUTO_REFRESH=on (also refresh on a schedule), ANTHROPIC_MODEL, REFRESH_DAYS.
 
 import { ANCHORS, COUNTRIES, COUNTRY_IDS, RING, TYPES } from "../../data/places.mjs";
 import {
-  store, readMenus, flatten, festivalId, todayET, dueJobs, triggerRefresh, readStatus, REFRESH_DAYS, daysBetween, claudeKey, autoRefreshOn,
+  store, readMenus, flatten, festivalId, todayET, dueJobs, triggerRefresh, readStatus, REFRESH_DAYS, daysBetween, claudeKey, autoRefreshOn, markFirstSeen,
 } from "../lib/menu.mjs";
+import { buildPrompt, parseImport } from "../lib/manual.mjs";
 
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
@@ -196,6 +199,44 @@ export default async (req) => {
       if (body.soldOut) await s.setJSON(key, { drinkId, soldOut: true, date: todayET(), by: clean(body.member, 24), at: new Date().toISOString() });
       else await s.delete(key);
       return json({ ok: true });
+    }
+
+    if (method === "POST" && path === "unlock") {
+      if (!refreshAllowed(req)) return json({ error: "Wrong password" }, 403);
+      const { fest } = await readMenus(s);
+      return json({ ok: true, prompt: buildPrompt({ today: todayET(), current: fest.festival?.name ? `${fest.festival.name} ${fest.festival.year || ""}`.trim() : "" }) });
+    }
+
+    if (method === "POST" && path === "import") {
+      if (!refreshAllowed(req)) return json({ error: "Wrong password" }, 403);
+      if (String(body.text || "").length > 2_000_000) return json({ error: "That file is too big (2 MB max)." }, 413);
+      const parsed = parseImport(body.text);
+      const preview = {
+        errors: parsed.errors, warnings: parsed.warnings, sources: parsed.sources?.length || 0,
+        festival: parsed.festival ? { ...parsed.festival.festival, nextFestival: parsed.festival.nextFestival, booths: parsed.festival.booths.length, drinks: parsed.festival.drinks } : null,
+        yearRound: parsed.yearRound ? { booths: parsed.yearRound.booths.length, drinks: parsed.yearRound.drinks } : null,
+      };
+      if (body.dryRun || !(parsed.festival || parsed.yearRound)) return json({ ok: !!(parsed.festival || parsed.yearRound), saved: false, preview });
+
+      const now = new Date().toISOString();
+      const who = clean(body.member, 24) || "someone";
+      const saved = [];
+      if (parsed.festival) {
+        const { fest: prevFest } = await readMenus(s);
+        const next = { festival: parsed.festival.festival, nextFestival: parsed.festival.nextFestival, booths: parsed.festival.booths, sources: parsed.sources, checkedAt: now, origin: "manual" };
+        await s.setJSON("menu/festival-previous", prevFest);
+        await s.setJSON("menu/festival", next);
+        await markFirstSeen(s, flatten(next.booths, festivalId(next.festival)));
+        saved.push(`festival: ${next.festival.name || "none"} — ${parsed.festival.drinks} drinks`);
+      }
+      if (parsed.yearRound) {
+        const yr = { booths: parsed.yearRound.booths, sources: parsed.sources, checkedAt: now, origin: "manual" };
+        await s.setJSON("menu/yearround", yr);
+        await markFirstSeen(s, flatten(yr.booths, "yr"));
+        saved.push(`year-round: ${parsed.yearRound.drinks} drinks`);
+      }
+      await s.setJSON("refresh/status", { state: "ok", startedAt: now, finishedAt: now, jobs: [], reason: `uploaded by ${who}`, message: `Manual update · ${saved.join(" · ")}`, manual: true });
+      return json({ ok: true, saved: true, preview });
     }
 
     if (method === "POST" && path === "refresh") {

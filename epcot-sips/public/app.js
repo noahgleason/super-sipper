@@ -1173,34 +1173,130 @@ function moreSheet(d) {
   });
 }
 
+// Settings: menu status, manual update via claude.ai (no API key), optional API refresh.
+const admin = { code: null, prompt: null, text: null };
+
 function infoSheet() {
   const { festival: f, nextFestival: nf, menu, refresh } = D();
   const st = refresh || {};
   const busy = st.state === "running" || st.state === "queued";
   const src = (menu.sources || []).slice(0, 8).map((u) => `<div class="src">• <a href="${esc(u)}" target="_blank" rel="noopener">${esc(u.replace(/^https?:\/\/(www\.)?/, ""))}</a></div>`).join("");
+  const origin = { seed: " (starter menu)", manual: " (uploaded)", claude: "" }[menu.origin] || "";
+  const unlocked = !!admin.prompt;
   openSheet(`
-    <h2>About this menu</h2>
+    <h2>Settings</h2>
+    <p class="group-label">${icon("info")}Current menu</p>
     <dl class="kv">
       <dt>Festival</dt><dd>${f?.name ? `${esc(f.name)}<br><span class="muted">${fmtDate(f.starts)} – ${fmtDate(f.ends)}${f.active ? "" : " (not running today)"}</span>` : "None running today"}</dd>
       ${nf?.name ? `<dt>Next up</dt><dd>${esc(nf.name)}${nf.starts ? ` · ${fmtDate(nf.starts)}` : ""}</dd>` : ""}
-      <dt>Festival menu</dt><dd>checked ${ago(menu.checkedAt)}${menu.origin === "seed" ? " (starter menu)" : ""}</dd>
-      <dt>Year-round</dt><dd>${menu.yearRoundCheckedAt ? `checked ${ago(menu.yearRoundCheckedAt)}` : "not researched yet"}</dd>
-      <dt>Auto-refresh</dt><dd>${st.auto ? `On — re-checks every ${st.everyDays} days, plus the day a festival starts or ends` : st.enabled ? "Off — the menu only updates when you tap the button below" : "Off — add EPCOT_SIPS_CLAUDE_KEY in Netlify to allow refreshes"}</dd>
-      <dt>Last run</dt><dd>${st.state === "never" ? "—" : `${esc(st.state)} ${ago(st.finishedAt || st.startedAt)}${st.message ? `<br><span class="muted">${esc(st.message)}</span>` : ""}`}</dd>
+      <dt>Festival menu</dt><dd>updated ${ago(menu.checkedAt)}${origin}</dd>
+      <dt>Year-round</dt><dd>${menu.yearRoundCheckedAt ? `updated ${ago(menu.yearRoundCheckedAt)}` : "starter list"}</dd>
+      <dt>Last update</dt><dd>${st.state === "never" ? "—" : `${esc(st.state)} ${ago(st.finishedAt || st.startedAt)}${st.message ? `<br><span class="muted">${esc(st.message)}</span>` : ""}`}</dd>
     </dl>
-    ${src ? `<p class="group-label">Sources</p>${src}` : ""}
-    <div style="height:14px"></div>
-    ${st.enabled && st.needsCode ? `<label class="field"><span>Refresh password</span><input id="refreshCode" type="password" autocomplete="off" value="${esc(ls.get(LS.rcode, ""))}" placeholder="Needed to start a refresh" /></label>` : ""}
-    ${st.enabled ? `<button class="btn accent block" id="refreshNow" ${busy ? "disabled" : ""}>${busy ? "Updating… (takes a few minutes)" : `${icon("refresh")}Refresh the menu now`}</button>` : ""}
-    <p class="muted" style="font-size:.78rem;margin-top:12px">Menus are researched from Disney's announcements and trusted Disney news sites. Prices can change at the booth — if something's off, fix it from the drink's ••• menu or add it with ＋.</p>
+    ${src ? `<details class="srcs"><summary>Sources (${(menu.sources || []).length})</summary>${src}</details>` : ""}
+
+    <p class="group-label">${icon("refresh")}Update the menu</p>
+    ${unlocked ? `
+      <ol class="steps">
+        <li><b>Copy the prompt</b><p>It already knows today's date and every map spot and field the app needs.</p>
+          <div class="btn-row"><button class="btn accent" id="copyPrompt">${icon("copy")}Copy prompt</button></div>
+          <details class="prompt-peek"><summary>Show the prompt</summary><textarea class="mono" id="promptText" readonly>${esc(admin.prompt)}</textarea></details></li>
+        <li><b>Run it in Claude</b><p>Paste it into a new chat at claude.ai with <b style="display:inline;font:inherit;text-transform:none;letter-spacing:0">web search</b> turned on. It replies with one block of JSON; this can take a few minutes. If the reply stops early, tell it "continue".</p>
+          <div class="btn-row"><a class="btn" href="https://claude.ai/new" target="_blank" rel="noopener">${icon("external")}Open claude.ai</a></div></li>
+        <li><b>Upload the reply</b><p>Save the JSON as a file and drop it here, or copy Claude's whole reply and paste it below.</p>
+          <label class="drop" id="drop">${icon("upload")}<b>Choose or drop a file</b><span>.json or .txt</span><input type="file" id="importFile" accept=".json,.txt,application/json,text/plain" /></label>
+          <textarea class="mono" id="importText" placeholder="…or paste Claude's reply here" style="min-height:90px">${esc(admin.text || "")}</textarea>
+          <div class="btn-row" style="margin-top:8px"><button class="btn primary" id="checkImport">${icon("check")}Check it</button></div>
+          <div id="importPreview" style="margin-top:12px"></div></li>
+      </ol>` : `
+      <p class="muted" style="font-size:.88rem">Get a ready-made prompt for claude.ai, then upload its reply to update the map for everyone. No API key needed.</p>
+      <label class="field"><span>Password</span><input id="adminCode" type="password" autocomplete="off" value="${esc(ls.get(LS.rcode, ""))}" placeholder="Menu password" /></label>
+      <button class="btn accent block" id="unlock">${icon("lock")}Unlock</button>`}
+
+    ${st.enabled ? `
+      <p class="group-label">${icon("bolt")}Automatic research</p>
+      <p class="muted" style="font-size:.84rem">${st.auto ? `On — re-checks every ${st.everyDays} days, plus the day a festival starts or ends.` : "Uses the API key set in Netlify. Only runs when you tap the button."}</p>
+      ${unlocked ? `<button class="btn block" id="refreshNow" ${busy ? "disabled" : ""}>${busy ? "Updating… (takes a few minutes)" : `${icon("refresh")}Research the menu with the API now`}</button>` : `<p class="muted" style="font-size:.8rem">Unlock above to use it.</p>`}` : ""}
+    <p class="muted" style="font-size:.78rem;margin-top:14px">Prices can change at the booth — if something's off, fix it from the drink's ••• menu or add it with ＋.</p>
   `, (el) => {
+    const unlock = async (code, quiet) => {
+      try {
+        const out = await api("unlock", { method: "POST", body: {}, headers: { "x-refresh-code": code } });
+        admin.code = code; admin.prompt = out.prompt; ls.set(LS.rcode, code);
+        $("#toast").hidden = true;
+        infoSheet();
+      } catch (e) { if (!quiet) toast(e.message); }
+    };
+    $("#unlock", el)?.addEventListener("click", () => {
+      const code = $("#adminCode", el).value.trim();
+      if (!code) return toast("Enter the password");
+      unlock(code);
+    });
+    $("#adminCode", el)?.addEventListener("keydown", (e) => { if (e.key === "Enter") $("#unlock", el).click(); });
+    if (!unlocked && ls.get(LS.rcode, "")) unlock(ls.get(LS.rcode, ""), true);
+
+    $("#copyPrompt", el)?.addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(admin.prompt); }
+      catch { const t = $("#promptText", el); t.closest("details").open = true; t.select(); document.execCommand("copy"); }
+      toast("Prompt copied — paste it into claude.ai");
+    });
+
+    const drop = $("#drop", el);
+    const readFile = (file) => {
+      if (!file) return;
+      if (file.size > 2_000_000) return toast("That file is too big (2 MB max)");
+      file.text().then((t) => { $("#importText", el).value = t; admin.text = t; check(); });
+    };
+    $("#importFile", el)?.addEventListener("change", (e) => readFile(e.target.files[0]));
+    drop?.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+    drop?.addEventListener("dragleave", () => drop.classList.remove("over"));
+    drop?.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); readFile(e.dataTransfer.files[0]); });
+
+    const send = (dryRun) => api("import", { method: "POST", body: { text: admin.text, dryRun, member: state.me?.name }, headers: { "x-refresh-code": admin.code } });
+    const check = async () => {
+      admin.text = $("#importText", el).value;
+      if (!admin.text.trim()) return toast("Upload a file or paste Claude's reply first");
+      const box = $("#importPreview", el);
+      box.innerHTML = `<p class="muted">Checking…</p>`;
+      try {
+        const out = await send(true);
+        box.innerHTML = importPreview(out.preview, out.ok);
+        box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        $("#applyImport", el)?.addEventListener("click", async (ev) => {
+          ev.target.disabled = true;
+          try {
+            await send(false);
+            admin.text = null;
+            closeSheet(); mapBuiltFor = null; await load();
+            toast("Menu updated for everyone");
+          } catch (e) { ev.target.disabled = false; toast(e.message); }
+        });
+      } catch (e) { box.innerHTML = ""; toast(e.message); }
+    };
+    $("#checkImport", el)?.addEventListener("click", check);
+
     $("#refreshNow", el)?.addEventListener("click", async () => {
-      const rcode = $("#refreshCode", el)?.value.trim() || "";
-      if (st.needsCode && !rcode) return toast("Enter the refresh password");
-      try { await api("refresh", { method: "POST", body: { member: state.me?.name }, headers: { "x-refresh-code": rcode } }); ls.set(LS.rcode, rcode); toast("Researching the latest menus… check back in a few minutes"); closeSheet(); setTimeout(() => load({ quiet: true }), 3000); }
+      try { await api("refresh", { method: "POST", body: { member: state.me?.name }, headers: { "x-refresh-code": admin.code } }); toast("Researching the latest menus… check back in a few minutes"); closeSheet(); setTimeout(() => load({ quiet: true }), 3000); }
       catch (e) { toast(e.message); }
     });
   });
+}
+
+function importPreview(p, ok) {
+  const f = p.festival, y = p.yearRound;
+  const rows = [];
+  if (f) rows.push(`<div class="imp-row">${icon("ticket")}<div><b>${f.name ? esc(f.name) : "No festival running"}</b><small>${f.name ? `${fmtDate(f.starts) || "?"} – ${fmtDate(f.ends) || "?"} · ${f.active ? "running now" : "not running today"} · ` : ""}${f.booths} booths · ${f.drinks} drinks${f.nextFestival?.name ? `<br>Next: ${esc(f.nextFestival.name)}${f.nextFestival.starts ? ` · ${fmtDate(f.nextFestival.starts)}` : ""}` : ""}</small></div></div>`);
+  if (y) rows.push(`<div class="imp-row">${icon("globe")}<div><b>Year-round pavilion drinks</b><small>${y.booths} spots · ${y.drinks} drinks</small></div></div>`);
+  if (p.sources) rows.push(`<div class="imp-row">${icon("info")}<div><b>${p.sources} source link${p.sources > 1 ? "s" : ""}</b><small>shown under Settings → Sources</small></div></div>`);
+  return `<div class="card import-card">
+    <h3 class="${ok ? "" : "bad"}">${icon(ok ? "check" : "alert")}${ok ? "Ready to update" : "Can't use this upload"}</h3>
+    <div class="rows">
+      ${rows.join("")}
+      ${p.errors.length ? `<ul class="errs">${p.errors.map((e) => `<li>${esc(e)}</li>`).join("")}</ul>` : ""}
+      ${p.warnings.length ? `<ul>${p.warnings.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>` : ""}
+      ${ok ? `<p class="muted" style="font-size:.8rem;margin:10px 0">This replaces ${f && y ? "the festival and year-round menus" : f ? "the festival menu" : "the year-round list"} for everyone. Family ratings stay in each person's passport.</p>
+        <button class="btn accent block" id="applyImport">${icon("upload")}Update the map</button>` : ""}
+    </div></div>`;
 }
 
 // ── Mutations ─────────────────────────────────────────────────────────────
@@ -1275,6 +1371,7 @@ document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && !$("#s
 $("#drawerGrip").onclick = () => { state.drawer = state.drawer === "full" ? (state.sel ? "half" : "peek") : state.drawer === "half" ? "full" : "half"; render(); };
 $("#meBtn").onclick = joinSheet;
 $("#festBtn").onclick = () => D() && infoSheet();
+$("#settingsBtn").onclick = () => D() && infoSheet();
 $("#addBtn").onclick = addSheet;
 $("#locBtn").onclick = toggleLocate;
 $("#fitBtn").onclick = () => { if (fitVB) { vb = { ...fitVB }; fitMap(); renderMarkers(); } };
