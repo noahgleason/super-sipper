@@ -10,7 +10,7 @@
 //   POST   /api/verify           check the family code
 //
 // Optional env vars: FAMILY_CODE (passcode for changes), EPCOT_SIPS_CLAUDE_KEY (your own Anthropic key;
-// enables "Refresh now"), AUTO_REFRESH=on (also refresh on a schedule), ANTHROPIC_MODEL, REFRESH_DAYS.
+// enables "Refresh now"), REFRESH_CODE (password for "Refresh now"), AUTO_REFRESH=on (also refresh on a schedule), ANTHROPIC_MODEL, REFRESH_DAYS.
 
 import { ANCHORS, COUNTRIES, COUNTRY_IDS, RING, TYPES } from "../../data/places.mjs";
 import {
@@ -26,6 +26,13 @@ function authorized(req) {
   const code = process.env.FAMILY_CODE;
   if (!code) return true;
   return (req.headers.get("x-family-code") || "").trim().toLowerCase() === code.trim().toLowerCase();
+}
+
+// Separate password for starting a (paid) menu refresh. Kept in Netlify, never in the repo.
+function refreshAllowed(req) {
+  const code = process.env.REFRESH_CODE;
+  if (!code) return true;
+  return (req.headers.get("x-refresh-code") || "").trim().toLowerCase() === code.trim().toLowerCase();
 }
 
 async function listJSON(s, prefix) {
@@ -76,6 +83,7 @@ async function getState(req) {
     refresh: {
       ...refresh,
       enabled: !!claudeKey(),
+      needsCode: !!process.env.REFRESH_CODE,
       auto: autoRefreshOn(),
       everyDays: REFRESH_DAYS(),
       due: due.jobs, dueReason: due.reason, autoTrigger,
@@ -191,6 +199,7 @@ export default async (req) => {
     }
 
     if (method === "POST" && path === "refresh") {
+      if (!refreshAllowed(req)) return json({ error: "Wrong refresh password" }, 403);
       const jobs = Array.isArray(body.jobs) ? body.jobs.filter((j) => ["festival", "yearround"].includes(j)) : ["festival", "yearround"];
       const out = await triggerRefresh({ siteUrl: url.origin, jobs, reason: `requested by ${clean(body.member, 24) || "someone"}`, manual: true });
       return json(out, out.started ? 200 : 409);

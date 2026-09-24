@@ -18,7 +18,7 @@ const TYPE_GROUPS = [
 ];
 const ONLY = [["all", "Anything", null], ["open", "Open now", "clock"], ["new", "New this week", "sparkle"], ["untried", "Haven't tried", "check"], ["want", "Wishlist", "heart"]];
 const typeChip = (t) => `${icon(TYPE_ICON[t] || "glass")}${TYPE_LABEL[t] || t}`;
-const LS = { me: "sips.me", code: "sips.code", cache: "sips.cache2", tab: "sips.tab", fopen: "sips.filtersOpen" };
+const LS = { me: "sips.me", code: "sips.code", rcode: "sips.refreshCode", cache: "sips.cache2", tab: "sips.tab", fopen: "sips.filtersOpen" };
 
 // Walking order used by the List ("walk the loop") and to order spots.
 const WALK = [
@@ -51,10 +51,10 @@ const state = {
 };
 
 // ── API ────────────────────────────────────────────────────────────────────
-async function api(path, { method = "GET", body } = {}) {
+async function api(path, { method = "GET", body, headers = {} } = {}) {
   const res = await fetch(`/api/${path}`, {
     method,
-    headers: { "content-type": "application/json", "x-family-code": state.code || "" },
+    headers: { "content-type": "application/json", "x-family-code": state.code || "", ...headers },
     body: body ? JSON.stringify(body) : undefined,
   });
   const out = await res.json().catch(() => ({}));
@@ -1190,11 +1190,14 @@ function infoSheet() {
     </dl>
     ${src ? `<p class="group-label">Sources</p>${src}` : ""}
     <div style="height:14px"></div>
+    ${st.enabled && st.needsCode ? `<label class="field"><span>Refresh password</span><input id="refreshCode" type="password" autocomplete="off" value="${esc(ls.get(LS.rcode, ""))}" placeholder="Needed to start a refresh" /></label>` : ""}
     ${st.enabled ? `<button class="btn accent block" id="refreshNow" ${busy ? "disabled" : ""}>${busy ? "Updating… (takes a few minutes)" : `${icon("refresh")}Refresh the menu now`}</button>` : ""}
     <p class="muted" style="font-size:.78rem;margin-top:12px">Menus are researched from Disney's announcements and trusted Disney news sites. Prices can change at the booth — if something's off, fix it from the drink's ••• menu or add it with ＋.</p>
   `, (el) => {
     $("#refreshNow", el)?.addEventListener("click", async () => {
-      try { await api("refresh", { method: "POST", body: { member: state.me?.name } }); toast("Researching the latest menus… check back in a few minutes"); closeSheet(); setTimeout(() => load({ quiet: true }), 3000); }
+      const rcode = $("#refreshCode", el)?.value.trim() || "";
+      if (st.needsCode && !rcode) return toast("Enter the refresh password");
+      try { await api("refresh", { method: "POST", body: { member: state.me?.name }, headers: { "x-refresh-code": rcode } }); ls.set(LS.rcode, rcode); toast("Researching the latest menus… check back in a few minutes"); closeSheet(); setTimeout(() => load({ quiet: true }), 3000); }
       catch (e) { toast(e.message); }
     });
   });

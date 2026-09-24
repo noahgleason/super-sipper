@@ -64,11 +64,12 @@ The app deliberately ignores `ANTHROPIC_API_KEY` and `ANTHROPIC_BASE_URL`. Netli
 | --- | --- | --- |
 | `EPCOT_SIPS_CLAUDE_KEY` | `sk-ant-…` | **Required** for any refresh |
 | `AUTO_REFRESH` | `on` | Optional. Leave unset for manual-only refreshes |
+| `REFRESH_CODE` | a password | Optional. Required to tap **Refresh the menu now** (the phone remembers it after one correct try) |
 | `FAMILY_CODE` | e.g. `figment` | Optional passcode for making changes |
 | `REFRESH_DAYS` | `3` | Optional. How often to re-check mid-festival |
 | `ANTHROPIC_MODEL` | `claude-sonnet-5` | Optional model override |
 
-3. Redeploy. Then open the app, tap the festival name at the top, and tap **Refresh the menu now**. Set `FAMILY_CODE` too, or anyone with the link can start a refresh. The first full research run takes a few minutes.
+3. Redeploy. Then open the app, tap the festival name at the top, and tap **Refresh the menu now**. Set `REFRESH_CODE` too, or anyone with the link can start a refresh. The first full research run takes a few minutes.
 
 **Cost:** each refresh runs a web-research session (up to ~26 searches and page reads) followed by a formatting pass. With `AUTO_REFRESH=on` at the default schedule that's roughly 10–12 refreshes a month, and the exact cost depends on the model and how many pages it reads. Check your usage in the Anthropic Console after the first run and set a spend limit you're comfortable with. Raising `REFRESH_DAYS` makes it cheaper.
 
