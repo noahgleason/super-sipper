@@ -1,22 +1,24 @@
 // Epcot Sips — front end (vanilla JS, no build step)
 
+import { icon, flag, flagBody, TYPE_ICON, LANDMARKS, spaceshipEarth, AVATARS, avatar } from "/icons.js";
+
 const TYPE_LABEL = {
-  beer: "🍺 Beer", cider: "🍏 Cider", wine: "🍷 Wine", sparkling: "🥂 Bubbly", cocktail: "🍸 Cocktail",
-  frozen: "🧊 Frozen", flight: "✈️ Flight", na: "🧃 Non-alcoholic", coffee: "☕ Coffee",
+  beer: "Beer", cider: "Cider", wine: "Wine", sparkling: "Bubbly", cocktail: "Cocktail",
+  frozen: "Frozen", flight: "Flight", na: "Non-alcoholic", coffee: "Coffee",
 };
 const TYPE_GROUPS = [
-  ["all", "All drinks", null],
-  ["cocktail", "🍸 Cocktails", ["cocktail"]],
-  ["frozen", "🧊 Frozen", ["frozen"]],
-  ["beer", "🍺 Beer & cider", ["beer", "cider"]],
-  ["wine", "🍷 Wine & bubbly", ["wine", "sparkling"]],
-  ["na", "🧃 Kid-friendly", ["na"]],
-  ["coffee", "☕ Coffee", ["coffee"]],
-  ["flight", "✈️ Flights", ["flight"]],
+  ["all", "All", null, "glass"],
+  ["cocktail", "Cocktails", ["cocktail"], "cocktail"],
+  ["frozen", "Frozen", ["frozen"], "frozen"],
+  ["beer", "Beer & cider", ["beer", "cider"], "beer"],
+  ["wine", "Wine & bubbly", ["wine", "sparkling"], "wine"],
+  ["na", "Kid-friendly", ["na"], "na"],
+  ["coffee", "Coffee", ["coffee"], "coffee"],
+  ["flight", "Flights", ["flight"], "flight"],
 ];
-const ONLY = [["all", "Anything"], ["open", "Open now"], ["new", "New this week"], ["untried", "Haven't tried"], ["want", "♥ Wishlist"]];
-const EMOJIS = ["🥤","🍹","🍺","🍷","🥂","🧋","🦆","🐭","🌎","🎡","🚀","🌺","🦖","👑","🐢","🧚","🐉","🦩"];
-const LS = { me: "sips.me", code: "sips.code", cache: "sips.cache2", tab: "sips.tab" };
+const ONLY = [["all", "Anything", null], ["open", "Open now", "clock"], ["new", "New this week", "sparkle"], ["untried", "Haven't tried", "check"], ["want", "Wishlist", "heart"]];
+const typeChip = (t) => `${icon(TYPE_ICON[t] || "glass")}${TYPE_LABEL[t] || t}`;
+const LS = { me: "sips.me", code: "sips.code", cache: "sips.cache2", tab: "sips.tab", fopen: "sips.filtersOpen" };
 
 // Walking order used by the List ("walk the loop") and to order spots.
 const WALK = [
@@ -45,6 +47,7 @@ const state = {
   me_pos: null,              // {x, y, lat, lng}
   watching: false,
   filters: { group: "all", only: "all", fest: true, yr: true, q: "", sort: "walk" },
+  filtersOpen: false,
 };
 
 // ── API ────────────────────────────────────────────────────────────────────
@@ -71,7 +74,7 @@ async function load({ quiet = false } = {}) {
     state.offline = true;
     if (!state.data) state.data = ls.get(LS.cache);
     if (!state.data) {
-      $("#view").innerHTML = `<div class="empty"><div class="e">📡</div><p>Couldn't reach the server.</p><button class="btn primary" onclick="location.reload()">Try again</button></div>`;
+      $("#view").innerHTML = `<div class="empty"><div class="e">${icon("alert")}</div><p>Couldn't reach the server.</p><button class="btn accent" onclick="location.reload()">Try again</button></div>`;
       document.body.dataset.tab = "list";
       return;
     }
@@ -87,7 +90,8 @@ const priceNum = (p) => { const m = String(p || "").match(/\$?(\d+(?:\.\d+)?)/);
 const members = () => D()?.members || [];
 const myRec = () => members().find((m) => state.me && m.name.toLowerCase() === state.me.name.toLowerCase());
 const myItem = (id) => myRec()?.items?.[id] || {};
-const countryOf = (id) => D().countries.find((c) => c.id === id) || { id, name: id, flag: "✨" };
+const countryOf = (id) => D().countries.find((c) => c.id === id) || { id, name: id };
+const pavCountry = (anchor) => (anchor === "america" ? "usa" : anchor);
 const anchorOf = (id) => D().anchors[id];
 const drinkById = (id) => D().drinks.find((d) => d.id === id);
 
@@ -148,11 +152,11 @@ const visibleDrinks = () => D().drinks.filter(passesFilters);
 // ── Festival theming & header ─────────────────────────────────────────────
 function applyTheme() {
   const n = (D().festival?.active ? D().festival.name : D().nextFestival?.name || "").toLowerCase();
-  let a = "#6d8cff", b = "#f2b33d";
-  if (n.includes("food")) { a = "#e8553e"; b = "#f2b33d"; }
-  else if (n.includes("holiday")) { a = "#d63a4a"; b = "#3fbf87"; }
-  else if (n.includes("art")) { a = "#c83fa2"; b = "#29c4d8"; }
-  else if (n.includes("flower")) { a = "#e2508f"; b = "#7ccf4b"; }
+  let a = "#1f5fa8", b = "#c9982e";
+  if (n.includes("food")) { a = "#a3263a"; b = "#c9982e"; }
+  else if (n.includes("holiday")) { a = "#b3202f"; b = "#2f8a5a"; }
+  else if (n.includes("art")) { a = "#6b3fa0"; b = "#d9a11f"; }
+  else if (n.includes("flower")) { a = "#c2446e"; b = "#5a9a3a"; }
   document.documentElement.style.setProperty("--accent", a);
   document.documentElement.style.setProperty("--accent-2", b);
 }
@@ -186,7 +190,7 @@ function renderHeader() {
   const stale = !menu?.checkedAt || (Date.now() - Date.parse(menu.checkedAt)) / 864e5 > (refresh?.everyDays || 3) + 1;
   $("#festName").textContent = name;
   $("#festMeta").innerHTML = `<span>${esc(meta)}</span><span class="fresh ${busy ? "busy" : stale ? "stale" : ""}">${busy ? "updating menu…" : `menu ${ago(menu?.checkedAt)}`}</span>`;
-  $("#meEmoji").textContent = state.me?.emoji || "👋";
+  $("#meAvatar").innerHTML = state.me ? avatar(state.me.emoji) : `<span class="avatar">${icon("user")}</span>`;
   $("#meName").textContent = state.me?.name || "Join";
 }
 
@@ -218,22 +222,6 @@ function render() {
 //  MAP
 // ══════════════════════════════════════════════════════════════════════════
 const NS = "http://www.w3.org/2000/svg";
-const GLYPHS = {
-  pyramid: "M-11 8h22M-9 8V4h18v4M-7 4V0h14v4M-5 0v-4h10v4M-3 -4v-4h6v4M-1.5 8V5h3v3",
-  stave: "M-9 9V2l4-3 5-8 5 8 4 3v7zM-5 -1h10M-2 9v-4h4v4M0 -9v-3",
-  temple: "M-10 9h20M-8 9V5h16v4M-11 5l11-4 11 4M-7 1v-3h14v3M-9 -2l9-4 9 4M-5 -6l5-4 5 4M0 -10v-2",
-  clock: "M-10 9V0l10-9 10 9v9zM-10 0h20M-3 9v-5h6v5M-6 0v9M6 0v9M0 -4.5m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0",
-  campanile: "M-3 10V-5h6v15zM-3 -5l3-6 3 6M-3 -1h6M-11 10V3h8M3 3h8v7",
-  colonial: "M-11 9V1h22v8zM-5 1v-3a5 5 0 0 1 10 0v3M0 -7v-4M-11 1l11-3.5L11 1M-7 9V4M-3 9V4M3 9V4M7 9V4",
-  pagoda: "M-9 9h18M-5 9V6h10v3M-10 6l10-2.5L10 6M-4 3.5V1h8v2.5M-8.5 1L0-1.5 8.5 1M-3 -1.5v-2h6v2M-7 -3.5L0-6l7 2.5M0 -6v-5",
-  minaret: "M-2.5 10V-6h5v16zM-3.5 -6h7M-1.5 -6v-3h3v3M0 -9v-2.5M-11 10V2h8.5M2.5 2H11v8M-8 10V6a1.5 1.5 0 0 1 3 0v4",
-  eiffel: "M-8 10L-2.5 -2 -1 -12h2L2.5 -2 8 10M-5.5 3.5h11M-2.5 -2h5M-3.5 10a3.5 3.5 0 0 1 7 0",
-  tudor: "M-10 9V0l5-6 5 6 5-6 5 6v9zM-10 0h20M-5 -6V9M5 -6V9M-10 4.5h20",
-  lodge: "M-10 9V-1h20v10zM-11 -1l3.5-7h15L11 -1M-5 -8v-3.5M5 -8v-3.5M-2.5 9V4.5h5V9M-7 3h2M5 3h2",
-  sphere: "M0 0m-11 0a11 11 0 1 0 22 0a11 11 0 1 0-22 0M-11 0h22M-9.5 -5.5h19M-9.5 5.5h19M0 -11L-6 0 0 11 6 0z",
-};
-const PAV_GLYPH = { mexico: "pyramid", norway: "stave", china: "temple", germany: "clock", italy: "campanile", america: "colonial", japan: "pagoda", morocco: "minaret", france: "eiffel", uk: "tudor", canada: "lodge" };
-
 let geo = null;          // projection + shapes
 let vb = null;           // current viewBox {x, y, w, h}
 let fitVB = null;
@@ -260,6 +248,30 @@ const el = (tag, attrs = {}, parent) => {
   parent?.appendChild(e);
   return e;
 };
+// Deterministic randomness so trees don't jump around between renders.
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6d2b79f5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const circ = (x, y, r) => `M${(x - r).toFixed(1)} ${y.toFixed(1)}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0`;
+function hull(pts) {
+  const p = [...pts].sort((a, b) => a.x - b.x || a.y - b.y);
+  const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const lo = [], up = [];
+  for (const q of p) { while (lo.length >= 2 && cross(lo[lo.length - 2], lo[lo.length - 1], q) <= 0) lo.pop(); lo.push(q); }
+  for (const q of p.reverse()) { while (up.length >= 2 && cross(up[up.length - 2], up[up.length - 1], q) <= 0) up.pop(); up.push(q); }
+  return lo.slice(0, -1).concat(up.slice(0, -1));
+}
+function inPoly(pt, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i], b = poly[j];
+    if ((a.y > pt.y) !== (b.y > pt.y) && pt.x < (b.x - a.x) * (pt.y - a.y) / (b.y - a.y) + a.x) inside = !inside;
+  }
+  return inside;
+}
+function segDist(p, a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y, L = dx * dx + dy * dy || 1;
+  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / L));
+  return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
+}
 
 function buildMap() {
   const A = D().anchors;
@@ -291,54 +303,175 @@ function buildMap() {
     }
     return pts;
   };
+  const unit = loop(1, 10);
+  const Rat = (x, y) => {           // loop radius in the direction of (x, y)
+    const a = Math.atan2(y - C.y, x - C.x);
+    let best = unit[0], bd = 9;
+    for (const q of unit) { let d = Math.abs(Math.atan2(q.y - C.y, q.x - C.x) - a); if (d > Math.PI) d = 2 * Math.PI - d; if (d < bd) { bd = d; best = q; } }
+    return Math.hypot(best.x - C.x, best.y - C.y);
+  };
+  const out = (p, dist) => { const d = Math.hypot(p.x - C.x, p.y - C.y) || 1; return { x: p.x + (p.x - C.x) / d * dist, y: p.y + (p.y - C.y) / d * dist }; };
   const prom = loop(0.8);
-  const lag = loop(0.6);
+  const lag = loop(0.69);
+  const deep = loop(0.63);
+  const se = P["spaceship-earth"];
+  const entrance = { x: se.x, y: se.y + 120 };
+  const gateMid = { x: (P.france.x + P.uk.x) / 2, y: (P.france.y + P.uk.y) / 2 };
+  const gateIn = out(gateMid, -Math.hypot(gateMid.x - C.x, gateMid.y - C.y) * 0.18);
+  const gate = out(gateMid, 95);
+  geo.gate = gate; geo.entrance = entrance;
+
+  // Park boundary: hull around the loop, Future World, the entrance and the Gateway.
+  const land = hull([...loop(1.2, 2), ...Object.values(P).map((p) => out(p, 60)), { x: entrance.x - 90, y: entrance.y + 40 }, { x: entrance.x + 90, y: entrance.y + 40 }, out(gate, 30)]);
+  const landD = smooth(land, true);
 
   const svg = $("#map");
   svg.innerHTML = "";
   const defs = el("defs", {}, svg);
   defs.innerHTML = `
-    <radialGradient id="lagoonG" cx="50%" cy="45%" r="60%"><stop offset="0" stop-color="var(--lagoon-a)"/><stop offset="1" stop-color="var(--lagoon-b)"/></radialGradient>
-    <pattern id="dots" width="18" height="18" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.2" fill="var(--ground-dots)"/></pattern>
-    <pattern id="ripples" width="60" height="26" patternUnits="userSpaceOnUse"><path d="M0 13q7.5-6 15 0t15 0 15 0 15 0" fill="none" stroke="var(--ripple)" stroke-width="1.4"/></pattern>
-    <clipPath id="lagoonClip"><path d="${smooth(lag, true)}"/></clipPath>
-    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="6"/></filter>`;
+    <radialGradient id="lagoonG" cx="50%" cy="50%" r="55%"><stop offset="0" stop-color="var(--water-deep)"/><stop offset=".75" stop-color="var(--water)"/><stop offset="1" stop-color="var(--water)"/></radialGradient>
+    <pattern id="forestP" width="46" height="40" patternUnits="userSpaceOnUse">
+      <rect width="46" height="40" fill="var(--forest)"/>
+      <g fill="var(--forest-2)"><circle cx="8" cy="9" r="9"/><circle cx="30" cy="6" r="8"/><circle cx="20" cy="26" r="10"/><circle cx="42" cy="28" r="8"/><circle cx="2" cy="34" r="7"/></g>
+      <g fill="#5d8a50"><circle cx="6" cy="7" r="5"/><circle cx="28" cy="4" r="4.5"/><circle cx="18" cy="23" r="6"/><circle cx="40" cy="25" r="4.5"/></g>
+    </pattern>
+    <pattern id="grassP" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M3 5l1-2M13 15l1-2M19 4l1-2M8 20l1-2" stroke="var(--grass-2)" stroke-width="1.2"/></pattern>
+    <pattern id="paveP" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="var(--pave)"/><path d="M0 8h8M8 0v8" stroke="var(--pave-edge)" stroke-width=".35" opacity=".7"/></pattern>
+    <radialGradient id="seG" cx="35%" cy="30%" r="80%"><stop offset="0" stop-color="#fbfdff"/><stop offset=".45" stop-color="#c6ccd3"/><stop offset="1" stop-color="#6f7780"/></radialGradient>
+    <radialGradient id="seShine" cx="30%" cy="25%" r="35%"><stop offset="0" stop-color="#fff" stop-opacity=".8"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+    <clipPath id="seClip"><circle r="16"/></clipPath>
+    <clipPath id="landClip"><path d="${landD}"/></clipPath>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="3"/></filter>`;
 
   const world = el("g", { id: "world" }, svg);
-  el("rect", { x: -3000, y: -3000, width: 6000, height: 6000, fill: "url(#dots)" }, world);
+  el("rect", { x: -4000, y: -4000, width: 8000, height: 8000, fill: "url(#forestP)" }, world);
+  // Land + berm
+  el("path", { d: landD, fill: "#2f5528", opacity: .5, transform: "translate(5 7)", filter: "url(#soft)" }, world);
+  el("path", { d: landD, fill: "var(--grass)", stroke: "#3d6634", "stroke-width": 5 }, world);
+  el("path", { d: landD, fill: "url(#grassP)" }, world);
 
-  // Walkways
+  // Walkways (Future World + entrance + Gateway)
   const walks = [
     ["plaza-mexico-side", "east-walkway", "odyssey", "test-track", "mission-space", "guardians", "creations", "spaceship-earth"],
     ["plaza-canada-side", "culinary-corridor", "imagination", "the-land", "seas", "spaceship-earth"],
     ["showcase-plaza", "communicore", "connections", "spaceship-earth"],
-  ];
+  ].map((w) => w.map((id) => P[id]));
+  walks.push([se, { x: se.x, y: se.y + 60 }, entrance]);
+  walks.push([gateIn, gateMid, gate]);
+  geo.walks = walks;
   const walkG = el("g", {}, world);
-  for (const w of walks) {
-    const d = smooth(w.map((id) => P[id]), false);
-    el("path", { d, fill: "none", stroke: "var(--walk-edge)", "stroke-width": 26, "stroke-linecap": "round", "stroke-linejoin": "round" }, walkG);
-    el("path", { d, fill: "none", stroke: "var(--walk)", "stroke-width": 20, "stroke-linecap": "round", "stroke-linejoin": "round" }, walkG);
+  const paveStroke = (d, w) => {
+    el("path", { d, fill: "none", stroke: "var(--pave-edge)", "stroke-width": w + 5, "stroke-linecap": "round", "stroke-linejoin": "round" }, walkG);
+    el("path", { d, fill: "none", stroke: "var(--pave)", "stroke-width": w, "stroke-linecap": "round", "stroke-linejoin": "round" }, walkG);
+  };
+  for (const w of walks) paveStroke(smooth(w, false), 18);
+  // Plazas
+  const plaza = (cx, cy, rx, ry) => {
+    el("ellipse", { cx, cy, rx: rx + 2.5, ry: ry + 2.5, fill: "var(--pave-edge)" }, walkG);
+    el("ellipse", { cx, cy, rx, ry, fill: "url(#paveP)" }, walkG);
+  };
+  plaza(P.communicore.x, P.communicore.y, 40, 40);
+  plaza((P["plaza-mexico-side"].x + P["plaza-canada-side"].x) / 2, P["showcase-plaza"].y, 118, 26);
+  plaza(se.x, se.y, 44, 44);
+  plaza(entrance.x, entrance.y, 70, 26);
+  // Entrance flower beds + CommuniCore fountain
+  const beds = rng(7);
+  for (let i = 0; i < 26; i++) {
+    const a = beds() * Math.PI * 2, r = 30 + beds() * 8;
+    el("circle", { cx: se.x + Math.cos(a) * 48 * (i % 2 ? 1 : 1.12), cy: se.y + Math.sin(a) * 48 * (i % 2 ? 1 : 1.12), r: 2.4, fill: ["#e05a8a", "#f2c94c", "#ffffff", "#c8405a"][i % 4] }, walkG);
   }
-  // World Celebration plaza
-  el("circle", { cx: P.communicore.x, cy: P.communicore.y, r: 38, fill: "var(--walk)", stroke: "var(--walk-edge)", "stroke-width": 3 }, walkG);
-  el("ellipse", { cx: (P["plaza-mexico-side"].x + P["plaza-canada-side"].x) / 2, cy: P["showcase-plaza"].y, rx: 120, ry: 26, fill: "var(--walk)", stroke: "var(--walk-edge)", "stroke-width": 3 }, walkG);
+  el("circle", { cx: P.communicore.x, cy: P.communicore.y, r: 13, fill: "var(--water)", stroke: "#fff", "stroke-width": 2 }, walkG);
+  el("circle", { cx: P.communicore.x, cy: P.communicore.y, r: 5, fill: "var(--water-shallow)" }, walkG);
 
-  // Promenade + lagoon
+  // Promenade
   const promD = smooth(prom, true);
-  el("path", { d: promD, fill: "none", stroke: "var(--walk-edge)", "stroke-width": 40, "stroke-linejoin": "round" }, world);
-  el("path", { d: promD, fill: "none", stroke: "var(--walk)", "stroke-width": 34, "stroke-linejoin": "round" }, world);
-  el("path", { d: smooth(lag, true), fill: "url(#lagoonG)" }, world);
-  const rip = el("g", { "clip-path": "url(#lagoonClip)" }, world);
-  el("rect", { x: C.x - 500, y: C.y - 400, width: 1000, height: 800, fill: "url(#ripples)", class: "lagoon-ripple" }, rip);
-  el("path", { d: smooth(lag, true), fill: "none", stroke: "var(--promenade)", "stroke-width": 6, class: "promenade-glow", filter: "url(#glow)" }, world);
-  el("path", { d: smooth(lag, true), fill: "none", stroke: "var(--promenade)", "stroke-width": 3.2, class: "lights" }, world);
+  el("path", { d: promD, fill: "none", stroke: "var(--pave-edge)", "stroke-width": 40, "stroke-linejoin": "round" }, world);
+  el("path", { d: promD, fill: "none", stroke: "url(#paveP)", "stroke-width": 35, "stroke-linejoin": "round" }, world);
+  el("path", { d: promD, fill: "none", stroke: "var(--pave-edge)", "stroke-width": 1, "stroke-dasharray": "6 5", opacity: .8 }, world);
 
-  // Spaceship Earth
-  const se = P["spaceship-earth"];
-  el("circle", { cx: se.x, cy: se.y, r: 34, fill: "var(--promenade)", opacity: .18, filter: "url(#glow)" }, world);
-  const sg = el("g", { transform: `translate(${se.x} ${se.y}) scale(2.3)` }, world);
-  el("circle", { r: 11, fill: "var(--glyph-fill)", stroke: "var(--glyph)", "stroke-width": 1.2 }, sg);
-  el("path", { d: GLYPHS.sphere, fill: "none", stroke: "var(--glyph)", "stroke-width": .8 }, sg);
+  // Pavilion courtyards, facing the lagoon
+  const padG = el("g", {}, world);
+  for (const id of ring) {
+    const p = out(P[id], 12), ang = Math.atan2(p.y - C.y, p.x - C.x) * 180 / Math.PI + 90;
+    const g = el("g", { transform: `translate(${p.x.toFixed(1)} ${p.y.toFixed(1)}) rotate(${ang.toFixed(1)})` }, padG);
+    el("rect", { x: -40, y: -22, width: 80, height: 44, fill: "var(--pave-edge)" }, g);
+    el("rect", { x: -38, y: -20, width: 76, height: 40, fill: "url(#paveP)" }, g);
+    el("rect", { x: -26, y: -34, width: 52, height: 16, fill: "#d9cfb8", stroke: "#b9aa88", "stroke-width": 1 }, g);
+  }
+
+  // Lagoon: shore, shallows, deep water, waves, a couple of FriendShip boats
+  const lagD = smooth(lag, true);
+  el("path", { d: lagD, fill: "none", stroke: "var(--shore)", "stroke-width": 9, "stroke-linejoin": "round" }, world);
+  el("path", { d: lagD, fill: "var(--water-shallow)" }, world);
+  el("path", { d: smooth(deep, true), fill: "url(#lagoonG)" }, world);
+  const wr = rng(42);
+  let waves = "";
+  for (let i = 0; i < 90; i++) {
+    const x = C.x + (wr() - .5) * 700, y = C.y + (wr() - .5) * 560;
+    if (Math.hypot(x - C.x, y - C.y) > Rat(x, y) * 0.58) continue;
+    waves += `M${x.toFixed(1)} ${y.toFixed(1)}q3.5-3 7 0t7 0`;
+  }
+  el("path", { d: waves, fill: "none", stroke: "#fff", "stroke-width": 1.3, opacity: .45, "stroke-linecap": "round" }, world);
+  const boat = (x, y, rot) => {
+    const g = el("g", { transform: `translate(${x} ${y}) rotate(${rot})` }, world);
+    el("path", { d: "M-14 0 0-2l0 0M-26 6q16 8 52 0", fill: "none", stroke: "#fff", "stroke-width": 1, opacity: .7 }, g);
+    el("path", { d: "M-12-4h22l4 4-4 4h-22z", fill: "#fff", stroke: "#2a241e", "stroke-width": .8 }, g);
+    el("rect", { x: -8, y: -3, width: 14, height: 6, fill: "#2d6aa8" }, g);
+  };
+  boat(C.x - 60, C.y + 70, -20); boat(C.x + 90, C.y - 40, 160);
+
+  // Future World / World Celebration buildings (map-scale footprints)
+  const fw = el("g", {}, world);
+  const bld = (id, fn) => { const p = P[id]; if (!p) return; const g = el("g", { transform: `translate(${p.x.toFixed(1)} ${p.y.toFixed(1)})` }, fw); fn(g); };
+  const shadowed = (g, tag, attrs) => { el(tag, { ...attrs, fill: "#1d2a17", opacity: .22, transform: "translate(4 5)" }, g); el(tag, attrs, g); };
+  bld("the-land", (g) => { shadowed(g, "rect", { x: -60, y: -34, width: 120, height: 68, fill: "#dcd8c8", stroke: "#8e8870", "stroke-width": 1.2 });
+    el("path", { d: "M-50-24l20 20-20 20M-20-24 0-4-20 16M10-24l20 20-20 20M40-24 55-4 40 16", fill: "none", stroke: "#8fb9bf", "stroke-width": 7, "stroke-linejoin": "round", opacity: .9 }, g); });
+  bld("imagination", (g) => { [[-20, 6, 26], [16, -4, 34]].forEach(([x, y, s]) => { shadowed(g, "path", { d: `M${x - s / 2} ${y + s / 2}L${x} ${y - s / 2}L${x + s / 2} ${y + s / 2}z`, fill: "#b8dbe8", stroke: "#4f8aa3", "stroke-width": 1.2 });
+    el("path", { d: `M${x} ${y - s / 2}V${y + s / 2}`, stroke: "#4f8aa3", "stroke-width": .8 }, g); }); });
+  bld("seas", (g) => { shadowed(g, "path", { d: "M-55 20C-55-10-30-30 0-26S55-6 55 20z", fill: "#c9e3ea", stroke: "#5f96a8", "stroke-width": 1.2 });
+    el("path", { d: "M-44 8q11-10 22 0t22 0 22 0 22 0", fill: "none", stroke: "#3f8fb0", "stroke-width": 3 }, g); });
+  bld("mission-space", (g) => { shadowed(g, "circle", { r: 26, fill: "#c9653f", stroke: "#7d3a24", "stroke-width": 1.2 });
+    el("ellipse", { rx: 38, ry: 9, fill: "none", stroke: "#e9c9a2", "stroke-width": 3, transform: "rotate(-18)" }, g);
+    el("circle", { cx: 34, cy: -22, r: 7, fill: "#8a9aa6", stroke: "#4a5058" }, g); el("circle", { cx: -30, cy: 24, r: 5, fill: "#d9a441", stroke: "#7d5a24" }, g); });
+  bld("test-track", (g) => { el("rect", { x: -80, y: -34, width: 110, height: 68, rx: 34, fill: "none", stroke: "#6b737b", "stroke-width": 7 }, g);
+    el("rect", { x: -80, y: -34, width: 110, height: 68, rx: 34, fill: "none", stroke: "#e8e8e8", "stroke-width": 1, "stroke-dasharray": "5 5" }, g);
+    shadowed(g, "rect", { x: -44, y: -18, width: 54, height: 36, fill: "#d8dbe0", stroke: "#6b737b", "stroke-width": 1.2 }); el("path", { d: "M-44-6h54", stroke: "#c4302a", "stroke-width": 3 }, g); });
+  bld("guardians", (g) => { shadowed(g, "rect", { x: -44, y: -28, width: 88, height: 56, fill: "#5d4f86", stroke: "#2f2745", "stroke-width": 1.2 });
+    el("path", { d: "M-44 0h88M-22-28v56M22-28v56", stroke: "#8573b8", "stroke-width": 1 }, g); el("circle", { r: 9, fill: "#e5b93f", stroke: "#2f2745" }, g); });
+  bld("odyssey", (g) => shadowed(g, "path", { d: "M-18-10 0-20 18-10v20L0 20-18 10z", fill: "#e2dccd", stroke: "#8e8870", "stroke-width": 1.2 }));
+  bld("communicore", (g) => { ["M-62-18A64 64 0 0 1-18-62", "M18-62A64 64 0 0 1 62-18", "M62 18A64 64 0 0 1 18 62", "M-18 62A64 64 0 0 1-62 18"].forEach((d) => {
+    el("path", { d, fill: "none", stroke: "#1d2a17", "stroke-width": 16, opacity: .2, transform: "translate(4 5)" }, g);
+    el("path", { d, fill: "none", stroke: "#ece6d6", "stroke-width": 16 }, g); el("path", { d, fill: "none", stroke: "#a9a28c", "stroke-width": 1, transform: "scale(1.13)" }, g); }); });
+
+  // Trees: seeded scatter across open grass, clear of water, paths and buildings.
+  const rt = rng(1234);
+  const avoid = [...ring.map((id) => [out(P[id], 12), 46]), ...["the-land", "imagination", "seas", "mission-space", "test-track", "guardians", "odyssey", "communicore", "spaceship-earth", "creations", "connections"].map((id) => [P[id], 72]), [entrance, 80]];
+  const bb = land.reduce((b, p) => ({ x0: Math.min(b.x0, p.x), x1: Math.max(b.x1, p.x), y0: Math.min(b.y0, p.y), y1: Math.max(b.y1, p.y) }), { x0: 1e9, x1: -1e9, y0: 1e9, y1: -1e9 });
+  const shade = ["", "", ""], hi = [], lo = [];
+  let placed = 0;
+  for (let i = 0; i < 2600 && placed < 520; i++) {
+    const p = { x: bb.x0 + rt() * (bb.x1 - bb.x0), y: bb.y0 + rt() * (bb.y1 - bb.y0) };
+    if (!inPoly(p, land)) continue;
+    const rr = Math.hypot(p.x - C.x, p.y - C.y), R = Rat(p.x, p.y);
+    if (rr < R * 0.69 + 8) continue;                               // lagoon + shore
+    if (Math.abs(rr - R * 0.8) < 26) continue;                      // promenade
+    if (avoid.some(([q, d]) => Math.hypot(p.x - q.x, p.y - q.y) < d)) continue;
+    if (walks.some((w) => w.some((q, k) => k && segDist(p, w[k - 1], q) < 18))) continue;
+    if (Math.abs(p.y - P["showcase-plaza"].y) < 34 && Math.abs(p.x - (P["plaza-mexico-side"].x + P["plaza-canada-side"].x) / 2) < 130) continue;
+    const r = 5 + rt() * 5;
+    lo.push(circ(p.x + 2.5, p.y + 3, r));
+    shade[placed % 3] += circ(p.x, p.y, r);
+    hi.push(circ(p.x - r * .3, p.y - r * .3, r * .45));
+    placed++;
+  }
+  const treeG = el("g", {}, world);
+  el("path", { d: lo.join(""), fill: "#1d2a17", opacity: .28 }, treeG);
+  ["var(--tree)", "var(--tree-lo)", "#6fa352"].forEach((c, k) => el("path", { d: shade[k], fill: c, stroke: "#2f5226", "stroke-width": .6 }, treeG));
+  el("path", { d: hi.join(""), fill: "var(--tree-hi)", opacity: .75 }, treeG);
+
+  // Spaceship Earth, drawn to scale
+  const sg = el("g", { transform: `translate(${se.x} ${se.y}) scale(1.9)` }, world);
+  sg.innerHTML = spaceshipEarth();
 
   // Layers that don't scale with zoom
   el("g", { id: "labels" }, world);
@@ -348,7 +481,7 @@ function buildMap() {
   // Bounds → initial fit
   const ids = [...ring, "spaceship-earth", "the-land", "mission-space"];
   const xs = ids.map((i) => P[i].x), ys = ids.map((i) => P[i].y);
-  geo.bounds = { x0: Math.min(...xs) - 40, x1: Math.max(...xs) + 40, y0: Math.min(...ys) - 50, y1: Math.max(...ys) + 50 };
+  geo.bounds = { x0: Math.min(...xs) - 40, x1: Math.max(...xs) + 40, y0: Math.min(...ys) - 60, y1: Math.max(...ys) + 50 };
   fitMap();
   initPanZoom();
 }
@@ -359,20 +492,26 @@ function renderAreaLabels() {
   g.innerHTML = "";
   const P = geo.pts, C = geo.center;
   const u = vb.w / $("#map").clientWidth;
-  const add = (x, y, text, cls = "area-label") => {
-    const t = el("text", { x, y, class: cls, transform: `translate(${x} ${y}) scale(${u}) translate(${-x} ${-y})` }, g);
+  const add = (x, y, text, cls) => {
+    const t = el("text", { class: cls, transform: `translate(${x.toFixed(1)} ${y.toFixed(1)}) scale(${u})` }, g);
     t.textContent = text;
   };
-  add(C.x, C.y - 6, "WORLD");
-  add(C.x, C.y + 12, "SHOWCASE");
-  add(P.communicore.x, P.communicore.y + 58, "World Celebration", "area-label");
-  const small = [["test-track", "Test Track"], ["the-land", "The Land"], ["imagination", "Imagination"], ["seas", "The Seas"], ["guardians", "Cosmic Rewind"], ["mission-space", "Mission: SPACE"], ["spaceship-earth", "Spaceship Earth"]];
+  add(C.x, C.y - 4, "WORLD SHOWCASE", "water-label");
+  add(C.x, C.y + 12, "LAGOON", "water-label sm");
+  add(P.communicore.x, P.communicore.y + 62, "World Celebration", "land-label");
+  const mid = (a, b) => ({ x: (P[a].x + P[b].x) / 2, y: (P[a].y + P[b].y) / 2 });
+  const lerp = (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+  const disc = lerp(P.communicore, mid("test-track", "mission-space"), 0.55), nat = lerp(P.communicore, mid("the-land", "imagination"), 0.55);
+  add(disc.x, disc.y, "World Discovery", "land-label");
+  add(nat.x, nat.y, "World Nature", "land-label");
+  add(geo.entrance.x, geo.entrance.y + 4, "MAIN ENTRANCE", "gate-label");
+  add(geo.gate.x, geo.gate.y + 16, "INT'L GATEWAY", "gate-label");
+  const small = [["test-track", "Test Track"], ["the-land", "The Land"], ["imagination", "Imagination!"], ["seas", "The Seas"], ["guardians", "Cosmic Rewind"], ["mission-space", "Mission: SPACE"], ["spaceship-earth", "Spaceship Earth"]];
   const S = spots();
   for (const [id, name] of small) {
     if (S[id] && id !== "spaceship-earth") continue;
     const p = P[id];
-    const t = el("text", { class: "map-label small", transform: `translate(${p.x} ${p.y + (id === "spaceship-earth" ? 34 : 0)}) scale(${u})`, y: id === "spaceship-earth" ? 0 : -14 }, g);
-    t.textContent = name;
+    add(p.x, p.y + (id === "spaceship-earth" ? 44 : 4), name, "fw-label");
   }
 }
 
@@ -390,17 +529,25 @@ function spots() {
   return by;
 }
 
+// Markers grow a little as you zoom in, so the map feels like a map and not a sticker sheet.
+const zoomK = () => (fitVB ? fitVB.w / vb.w : 1);
+const growPav = () => Math.max(0.9, Math.min(2.1, Math.pow(zoomK(), 0.55)));
+const growPin = () => Math.max(0.9, Math.min(1.5, Math.pow(zoomK(), 0.35)));
+const markerScale = (kind) => (vb.w / $("#map").clientWidth) * (kind === "pav" ? growPav() : growPin());
+
 function renderMarkers() {
   const g = $("#markers");
   if (!g || !geo) return;
-  g.innerHTML = "";
   renderAreaLabels();
+  updateScale();
   const u = vb.w / $("#map").clientWidth;
   const S = spots();
   const rec = myRec();
   const ordered = Object.keys(D().anchors).sort((a, b) => (D().anchors[a].kind === "pavilion") - (D().anchors[b].kind === "pavilion"));
   const shown = ordered.filter((id) => S[id] || D().anchors[id].kind === "pavilion");
-  geo.disp = spread(shown.map((id) => ({ id, ...geo.pts[id], r: (D().anchors[id].kind === "pavilion" ? 27 : 17) * u })));
+  const gp = growPav(), gn = growPin();
+  geo.disp = spread(shown.map((id) => ({ id, ...geo.pts[id], r: (D().anchors[id].kind === "pavilion" ? 25 * gp : 14 * gn) * u })));
+  let html = "";
   for (const id of shown) {
     const a = D().anchors[id];
     const s = S[id];
@@ -410,45 +557,59 @@ function renderMarkers() {
     const vis = s?.vis || [];
     const tried = rec && s?.all.some((d) => rec.items[d.id]?.tried);
     const allSoon = vis.length && vis.every((d) => !isOpen(d) && !d.status?.soldOut);
-    const m = el("g", { class: `marker ${!vis.length ? "dim" : ""} ${state.sel === id ? "sel" : ""} ${tried ? "tried" : ""}`, "data-anchor": id, transform: `translate(${p.x} ${p.y}) scale(${u})` }, g);
+    const cls = `marker ${!vis.length ? "dim" : ""} ${state.sel === id ? "sel" : ""} ${tried ? "tried" : ""}`;
+    const tf = `translate(${p.x.toFixed(1)} ${p.y.toFixed(1)}) scale(${markerScale(isPav ? "pav" : "pin")})`;
     if (isPav) {
-      el("circle", { r: 26, class: "hit" }, m);
-      const gl = el("g", { class: "glyph" }, m);
-      el("rect", { x: -17, y: -17, width: 34, height: 34, rx: 10, class: "plate" }, gl);
-      el("path", { d: GLYPHS[PAV_GLYPH[id]] || GLYPHS.sphere, transform: "scale(1.05)" }, gl);
-      const lab = el("text", { y: 30, class: "map-label" }, m);
-      lab.textContent = a.name.replace("The American Adventure", "America");
-      if (vis.length) {
-        el("circle", { cx: 16, cy: -16, r: 9, class: allSoon ? "soon" : "badge" }, m);
-        el("text", { x: 16, y: -16, class: "badge-t" }, m).textContent = vis.length;
-      }
+      const name = a.name.replace("The American Adventure", "America").replace("United Kingdom", "U.K.");
+      const w = name.length * 5.6 + 14;
+      html += `<g class="${cls}" data-anchor="${id}" data-kind="pav" transform="${tf}">
+        <circle r="30" cy="-4" class="hit"/>
+        <circle r="25" cy="-6" class="sel-ring"/>
+        <g class="art">${LANDMARKS[id] || ""}</g>
+        <rect class="plate-bg" x="${-w / 2}" y="11" width="${w}" height="14"/>
+        <text class="plate-t" y="18.3">${esc(name)}</text>
+        ${vis.length ? `<rect class="tag ${allSoon ? "soon" : ""}" x="11" y="-30" width="17" height="15"/><text class="tag-t" x="19.5" y="-22.3">${vis.length}</text>` : ""}
+        ${tried ? `<rect class="tried-tag" x="-26" y="-30" width="14" height="14"/><path d="M-23.5-23 -20.5-20l5-5.5" fill="none" stroke="#fff" stroke-width="2"/>` : ""}
+      </g>`;
     } else {
-      const first = (vis[0] || s.all[0]);
-      const flag = first.country !== "park" ? countryOf(first.country).flag : typeIcon(s.all);
-      el("circle", { r: 20, class: "hit" }, m);
-      el("circle", { r: 14, class: "pin-bg" }, m);
-      el("text", { class: "flag", y: 1 }, m).textContent = flag;
-      if (vis.length) {
-        el("circle", { cx: 11, cy: -11, r: 8, class: allSoon ? "soon" : "badge" }, m);
-        el("text", { x: 11, y: -11, class: "badge-t" }, m).textContent = vis.length;
-      }
-      if (u < 0.9 || state.sel === id) {
-        const names = [...new Set(s.all.map((d) => d.booth))];
-        const lab = el("text", { y: 26, class: "map-label small" }, m);
-        lab.textContent = names[0] + (names.length > 1 ? ` +${names.length - 1}` : "");
-      }
+      const first = vis[0] || s.all[0];
+      const inner = first.country !== "park"
+        ? `<svg class="pin-flag" x="-9" y="-25" width="18" height="12" viewBox="0 0 30 20" preserveAspectRatio="xMidYMid slice">${flagBody(first.country)}</svg>`
+        : `<svg class="pin-flag" x="-7.5" y="-26.5" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="${iconPath(typeIcon(s.all))}"/></svg>`;
+      const names = [...new Set(s.all.map((d) => d.booth))];
+      html += `<g class="${cls}" data-anchor="${id}" data-kind="pin" transform="${tf}">
+        <circle r="20" cy="-16" class="hit"/>
+        <ellipse cx="0" cy="0" rx="5" ry="2" fill="#000" opacity=".3"/>
+        <path class="pin-body" d="M0 0C-3-6-12-10-12-19A12 12 0 1 1 12-19C12-10 3-6 0 0Z"/>
+        ${inner}
+        ${vis.length ? `<rect class="tag ${allSoon ? "soon" : ""}" x="6" y="-38" width="15" height="13"/><text class="tag-t" x="13.5" y="-31.3">${vis.length}</text>` : ""}
+        ${u < 0.9 || state.sel === id ? `<text class="booth-t" y="12">${esc(names[0] + (names.length > 1 ? ` +${names.length - 1}` : ""))}</text>` : ""}
+      </g>`;
     }
   }
+  g.innerHTML = html;
+  hideCrowdedLabels();
   renderMe();
 }
 
-const TYPE_ICON = { beer: "🍺", cider: "🍏", wine: "🍷", sparkling: "🥂", cocktail: "🍸", frozen: "🧊", flight: "🍺", na: "🧃", coffee: "☕" };
+// Land and building names give way to drink markers when they'd overlap.
+function hideCrowdedLabels() {
+  const boxes = [...document.querySelectorAll("#markers .marker")].map((m) => m.getBoundingClientRect());
+  const hit = (a, b) => a.left < b.right - 4 && a.right > b.left + 4 && a.top < b.bottom - 4 && a.bottom > b.top + 4;
+  document.querySelectorAll("#labels text:not(.water-label)").forEach((t) => {
+    const r = t.getBoundingClientRect();
+    t.style.display = boxes.some((b) => hit(r, b)) ? "none" : "";
+  });
+}
+
 function typeIcon(ds) {
   const n = {};
   for (const d of ds) n[d.type] = (n[d.type] || 0) + 1;
   const top = Object.entries(n).sort((a, b) => b[1] - a[1])[0];
-  return TYPE_ICON[top?.[0]] || "🍹";
+  return TYPE_ICON[top?.[0]] || "glass";
 }
+const iconPath = (name) => (icon(name).match(/ d="([^"]+)"/) || [])[1] || "";
+
 // Push overlapping markers apart (in world units) so neighbours like Norway & China stay tappable.
 function spread(items) {
   const pos = items.map((i) => ({ ...i }));
@@ -480,6 +641,18 @@ function renderMe() {
   el("circle", { r: 7, class: "me-dot" }, m);
 }
 
+// Scale bar in feet, plus rough walking time (≈80 m per minute).
+function updateScale() {
+  const bar = $("#scaleBar");
+  if (!bar || !vb) return;
+  const pxPerM = $("#map").clientWidth / vb.w;
+  const ft = [50, 100, 200, 300, 500, 1000, 2000].find((f) => f * 0.3048 * pxPerM >= 56) || 2000;
+  const m = ft * 0.3048;
+  bar.style.width = `${Math.round(m * pxPerM)}px`;
+  const mins = Math.round(m / 80);
+  $("#scaleT").textContent = `${ft.toLocaleString()} FT${mins >= 1 ? ` · ${mins} MIN WALK` : ""}`;
+}
+
 function setVB(next) {
   const svg = $("#map");
   const W = svg.clientWidth || 390, H = svg.clientHeight || 700;
@@ -493,21 +666,23 @@ function setVB(next) {
   next.x = cx - next.w / 2; next.y = cy - next.h / 2;
   vb = next;
   svg.setAttribute("viewBox", `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+  updateScale();
 }
 function fitMap() {
   const svg = $("#map");
   const W = svg.clientWidth || 390, H = svg.clientHeight || 700;
   const b = geo.bounds;
-  const top = 110, bottom = 130; // header+chips, drawer peek
-  const usableH = Math.max(200, H - top - bottom);
-  const k = Math.min(W / (b.x1 - b.x0), usableH / (b.y1 - b.y0)); // px per meter
+  const top = 118, bottom = 138; // header + filter bar, drawer peek
+  const left = 22, right = 56;           // clear of the zoom tools
+  const usableH = Math.max(200, H - top - bottom), usableW = Math.max(200, W - left - right);
+  const k = Math.min(usableW / (b.x1 - b.x0), usableH / (b.y1 - b.y0)); // px per meter
   const w = W / k, h = H / k;
-  const cx = (b.x0 + b.x1) / 2;
-  const cyPx = top + usableH / 2; // where the park centre should land on screen
-  const cy = (b.y0 + b.y1) / 2;
-  vb = { x: cx - w / 2, y: cy - cyPx / k, w, h };
+  const cxPx = left + usableW / 2, cyPx = top + usableH / 2; // where the park centre should land on screen
+  const cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2;
+  vb = { x: cx - cxPx / k, y: cy - cyPx / k, w, h };
   fitVB = { ...vb };
   svg.setAttribute("viewBox", `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+  updateScale();
 }
 
 let rafPending = false;
@@ -517,9 +692,10 @@ function scheduleMarkerUpdate() {
   requestAnimationFrame(() => {
     rafPending = false;
     const u = vb.w / $("#map").clientWidth;
+    const k = { pav: markerScale("pav"), pin: markerScale("pin") };
     document.querySelectorAll("#markers .marker").forEach((m) => {
       const p = geo.disp?.[m.dataset.anchor] || geo.pts[m.dataset.anchor];
-      m.setAttribute("transform", `translate(${p.x} ${p.y}) scale(${u})`);
+      m.setAttribute("transform", `translate(${p.x} ${p.y}) scale(${k[m.dataset.kind]})`);
     });
     document.querySelectorAll("#labels text").forEach((t) => {
       const tr = t.getAttribute("transform").replace(/scale\([^)]*\)/, `scale(${u})`);
@@ -530,6 +706,7 @@ function scheduleMarkerUpdate() {
 }
 
 let pzReady = false;
+let zoomAtFn = null;
 function initPanZoom() {
   if (pzReady) return;
   pzReady = true;
@@ -541,7 +718,7 @@ function initPanZoom() {
     const r = svg.getBoundingClientRect();
     return { x: vb.x + (cx - r.left) / r.width * vb.w, y: vb.y + (cy - r.top) / r.height * vb.h };
   };
-  const zoomAt = (cx, cy, f) => {
+  const zoomAt = zoomAtFn = (cx, cy, f) => {
     const w = toWorld(cx, cy);
     const nw = vb.w / f;
     const r = svg.getBoundingClientRect();
@@ -587,6 +764,7 @@ function initPanZoom() {
         const hit = document.elementsFromPoint(e.clientX, e.clientY).find((n) => n.closest?.(".marker"));
         const m = hit?.closest(".marker");
         if (m) selectSpot(m.dataset.anchor);
+        else if (state.filtersOpen) setFiltersOpen(false);
         else if (state.drawer !== "peek") { state.sel = null; state.drawer = "peek"; render(); }
       }
       renderMarkers();
@@ -619,16 +797,45 @@ function selectSpot(id) {
   scheduleMarkerUpdate();
 }
 
-function renderLayers() {
-  const f = state.filters;
-  const fest = D().festival;
-  const festOn = fest?.name ? `<button class="chip-btn toggle ${f.fest ? "on" : ""}" data-layer="fest">${f.fest ? "✓ " : ""}${esc(shortFest(fest.name).replace(/ Festival$/, ""))}</button>` : "";
-  $("#layerRow").innerHTML = `
-    ${festOn}
-    <button class="chip-btn toggle ${f.yr ? "on" : ""}" data-layer="yr">${f.yr ? "✓ " : ""}Year-round</button>
-    ${TYPE_GROUPS.map(([k, l]) => `<button class="chip-btn ${f.group === k ? "on" : ""}" data-group="${k}">${l}</button>`).join("")}
-    ${ONLY.slice(1).map(([k, l]) => `<button class="chip-btn ${f.only === k ? "on" : ""}" data-only="${k}">${l}</button>`).join("")}`;
+// ── Filters (collapsible; shared by the map and the menu list) ────────────
+const activeFilterCount = () => { const f = state.filters; return (f.group !== "all") + (f.only !== "all") + !f.fest + !f.yr; };
+function filterSummary() {
+  const f = state.filters, fest = D().festival;
+  const menus = [f.fest && fest?.name ? shortFest(fest.name).replace(/ Festival$/, "") : null, f.yr ? "Year-round" : null].filter(Boolean).join(" + ") || "No menus";
+  const g = TYPE_GROUPS.find((x) => x[0] === f.group), o = ONLY.find((x) => x[0] === f.only);
+  return `<b>${esc(menus)}</b> · ${esc(f.group === "all" ? "All drinks" : g[1])}${f.only !== "all" ? ` · ${esc(o[1])}` : ""}`;
 }
+function filterPanel() {
+  const f = state.filters, fest = D().festival, n = activeFilterCount(), open = state.filtersOpen;
+  return `<div class="filterbar" data-open="${open}">
+      <button class="fb-toggle" data-ftoggle aria-expanded="${open}">${icon("filter")}Filters${n ? `<span class="count">${n}</span>` : ""}${icon("chevron", "chev")}</button>
+      <div class="fb-sum">${filterSummary()}</div>
+    </div>
+    <div class="filter-panel" ${open ? "" : "hidden"}><div class="fp-inner">
+      <div class="fp-sec"><h5>Menus ${n ? `<button data-freset>Reset all</button>` : ""}</h5><div class="switches">
+        ${fest?.name ? `<button class="switch ${f.fest ? "on" : ""}" data-layer="fest"><span>${esc(shortFest(fest.name))}<small>${fest.active ? `Festival booths · through ${fmtDate(fest.ends)}` : `Festival booths · starts ${fmtDate(fest.starts)}`}</small></span><span class="track"></span></button>` : ""}
+        <button class="switch ${f.yr ? "on" : ""}" data-layer="yr"><span>Year-round drinks<small>Pavilion bars, carts &amp; restaurants</small></span><span class="track"></span></button>
+      </div></div>
+      <div class="fp-sec"><h5>Drink type</h5><div class="fp-grid">${TYPE_GROUPS.map(([k, l, , ic]) => `<button class="fp-type ${f.group === k ? "on" : ""}" data-group="${k}">${icon(ic)}${l}</button>`).join("")}</div></div>
+      <div class="fp-sec"><h5>Show</h5><div class="seg">${ONLY.map(([k, l, ic]) => `<button class="${f.only === k ? "on" : ""}" data-only="${k}">${ic ? icon(ic) : ""}${l}</button>`).join("")}</div></div>
+    </div></div>`;
+}
+function setFiltersOpen(open) {
+  state.filtersOpen = open;
+  ls.set(LS.fopen, open);
+  document.querySelectorAll(".filterbar").forEach((b) => { b.dataset.open = open; b.querySelector("[data-ftoggle]")?.setAttribute("aria-expanded", open); });
+  document.querySelectorAll(".filter-panel").forEach((p) => { p.hidden = !open; });
+}
+function renderLayers() { $("#mapFilters").innerHTML = filterPanel(); }
+
+function spotArt(id, ds) {
+  const a = anchorOf(id);
+  if (a?.kind === "pavilion" && LANDMARKS[id]) return `<span class="spot-art"><svg viewBox="-25 -29 50 41" aria-hidden="true">${LANDMARKS[id]}</svg></span>`;
+  const first = ds?.[0];
+  if (first && first.country !== "park") return `<span class="spot-art">${flag(first.country)}</span>`;
+  return `<span class="spot-art">${icon(ds?.length ? typeIcon(ds) : "pin")}</span>`;
+}
+const walkMins = (id) => (state.me_pos && geo ? Math.max(1, Math.round(Math.hypot(geo.pts[id].x - state.me_pos.x, geo.pts[id].y - state.me_pos.y) / 80)) : null);
 
 function renderDrawer() {
   const body = $("#drawerBody");
@@ -641,12 +848,12 @@ function renderDrawer() {
     const top = [...vis].map((d) => ({ d, r: avgRating(d.id) })).filter((x) => x.r).sort((a, b) => b.r - a.r)[0];
     const soon = D().festival && !D().festival.active && D().festival.starts > D().today;
     body.innerHTML = `
-      <div class="spot-head"><span class="big">🧭</span><div><h2>Tap a pavilion</h2><p>${vis.length} drinks shown · ${open} open now${soon ? ` · festival starts ${fmtDate(D().festival.starts)}` : ""}</p></div></div>
+      <div class="spot-head"><span class="spot-art">${icon("compass")}</span><div><h2>Explore the park</h2><p>${vis.length} drinks shown · ${open} open now${soon ? ` · festival starts ${fmtDate(D().festival.starts)}` : ""}</p></div></div>
       <div class="peek-row">
-        ${fresh ? `<button class="peek-card" data-only-jump="new"><b>✨ ${fresh} new</b>this week</button>` : ""}
-        ${top ? `<button class="peek-card" data-jump="${esc(top.d.anchor)}"><b>⭐ ${top.r.toFixed(1)} family pick</b>${esc(top.d.name)}</button>` : ""}
-        <button class="peek-card" data-tabjump="list"><b>📜 Walk the loop</b>drinks in walking order</button>
-        ${state.me_pos ? `<button class="peek-card" data-nearest><b>📍 Closest drink</b>to where you are</button>` : ""}
+        ${state.me_pos ? `<button class="peek-card" data-nearest>${icon("locate")}<span><b>Closest drink</b>to where you are</span></button>` : ""}
+        ${fresh ? `<button class="peek-card" data-only-jump="new">${icon("sparkle")}<span><b>${fresh} new</b>this week</span></button>` : ""}
+        ${top ? `<button class="peek-card" data-jump="${esc(top.d.anchor)}">${icon("star")}<span><b>${top.r.toFixed(1)} family pick</b>${esc(top.d.name)}</span></button>` : ""}
+        <button class="peek-card" data-tabjump="list">${icon("walk")}<span><b>Walk the loop</b>drinks in walking order</span></button>
       </div>`;
     return;
   }
@@ -660,18 +867,17 @@ function renderDrawer() {
     if (!b) booths.push((b = { name: d.booth, where: d.where, note: d.note, yr: d.yearRound, drinks: [] }));
     b.drinks.push(d);
   }
-  const icon = a.kind === "pavilion" ? countryOf(Object.entries({ america: "usa" }).find(([k]) => k === state.sel)?.[1] || state.sel).flag : (list[0] && list[0].country !== "park" ? countryOf(list[0].country).flag : typeIcon(S.all));
-  const dist = state.me_pos ? Math.hypot(geo.pts[state.sel].x - state.me_pos.x, geo.pts[state.sel].y - state.me_pos.y) : null;
+  const mins = walkMins(state.sel);
   body.innerHTML = `
-    <div class="spot-head"><span class="big">${icon}</span><div><h2>${esc(a.name)}</h2>
-      <p>${list.length} drink${list.length === 1 ? "" : "s"}${hidden > 0 ? ` · ${hidden} hidden by filters` : ""}${dist != null ? ` · ~${Math.round(dist / 80)} min walk` : ""}</p></div>
-      <button class="x" data-closespot aria-label="Close">✕</button></div>
+    <div class="spot-head">${spotArt(state.sel, list.length ? list : S.all)}<div><h2>${esc(a.name)}</h2>
+      <p>${list.length} drink${list.length === 1 ? "" : "s"}${hidden > 0 ? ` · ${hidden} hidden by filters` : ""}${mins ? ` · ${icon("walk")} ~${mins} min` : ""}</p></div>
+      <button class="x" data-closespot aria-label="Close">${icon("close")}</button></div>
     ${booths.map((b) => `
-      <p class="booth-name">${esc(b.name)}${b.yr ? ' <span class="chip yr">year-round</span>' : ""}</p>
-      ${b.where ? `<p class="booth-where">📍 ${esc(b.where)}</p>` : ""}
+      <p class="booth-name">${esc(b.name)}${b.yr ? ' <span class="chip">Year-round</span>' : ""}</p>
+      ${b.where ? `<p class="booth-where">${icon("pin")}${esc(b.where)}</p>` : ""}
       ${b.note ? `<div class="note">${esc(b.note)}</div>` : ""}
       <div class="drinks">${b.drinks.map((d) => drinkCard(d)).join("")}</div>`).join("")
-    || `<div class="empty"><div class="e">🫗</div><p>${hidden ? "Nothing here matches your filters." : "No drinks listed here right now."}</p></div>`}`;
+    || `<div class="empty"><div class="e">${icon("glass")}</div><p>${hidden ? "Nothing here matches your filters." : "No drinks listed here right now."}</p></div>`}`;
 }
 
 // ── Geolocation ───────────────────────────────────────────────────────────
@@ -710,27 +916,30 @@ function drinkCard(d, { showWhere = false } = {}) {
   const t = D().today;
   const o = opensOn(d);
   const chips = [`<span class="chip">${TYPE_LABEL[d.type] || d.type}</span>`];
-  if (d.isNew) chips.push(`<span class="chip new">✨ New</span>`);
-  if (o && o > t) chips.push(`<span class="chip soon">Opens ${fmtDate(o)}</span>`);
+  if (d.isNew) chips.push(`<span class="chip new">${icon("sparkle")}New</span>`);
+  if (o && o > t) chips.push(`<span class="chip soon">${icon("clock")}Opens ${fmtDate(o)}</span>`);
   if (d.closes && d.closes < t) chips.push(`<span class="chip warn">Ended ${fmtDate(d.closes)}</span>`);
   else if (d.closes) chips.push(`<span class="chip">Until ${fmtDate(d.closes)}</span>`);
-  if (d.status?.soldOut) chips.push(`<span class="chip warn">Sold out today · ${esc(d.status.by || "family")}</span>`);
-  if (d.source === "family") chips.push(`<span class="chip fam">Found by ${esc(d.addedBy || "family")}</span>`);
-  if (avg) chips.push(`<span class="chip">⭐ ${avg.toFixed(1)} family</span>`);
-  const stars = [1, 2, 3, 4, 5].map((n) => `<button data-rate="${n}" aria-label="Rate ${n}" class="${(mine.rating || 0) >= n ? "lit" : ""}">★</button>`).join("");
+  if (d.status?.soldOut) chips.push(`<span class="chip warn">${icon("ban")}Sold out today · ${esc(d.status.by || "family")}</span>`);
+  if (d.source === "family") chips.push(`<span class="chip fam">${icon("user")}Found by ${esc(d.addedBy || "family")}</span>`);
+  if (avg) chips.push(`<span class="chip star">${icon("star")}${avg.toFixed(1)} family</span>`);
+  const stars = [1, 2, 3, 4, 5].map((n) => `<button data-rate="${n}" aria-label="Rate ${n}" class="${(mine.rating || 0) >= n ? "lit" : ""}">${icon("star")}</button>`).join("");
   return `<article class="drink ${mine.tried ? "tried" : ""} ${d.status?.soldOut ? "soldout" : ""}" data-id="${esc(d.id)}">
-    <div class="drink-top"><h4>${esc(d.name)}</h4><span class="price">${d.price ? esc(d.price) : '<span class="muted">—</span>'}</span></div>
-    ${d.desc ? `<p class="desc">${esc(d.desc)}</p>` : ""}
-    ${showWhere ? `<p class="where">${countryOf(d.country).flag} ${esc(d.booth)}${d.where ? ` · ${esc(d.where)}` : ""} <button class="btn ghost" style="min-height:0;padding:0 4px;font-size:.76rem" data-jump="${esc(d.anchor)}">🗺️ map</button></p>` : ""}
+    <div class="drink-top">
+      <span class="drink-type" title="${esc(TYPE_LABEL[d.type] || d.type)}">${icon(TYPE_ICON[d.type] || "glass")}</span>
+      <div class="drink-title"><h4>${esc(d.name)}</h4>${d.desc ? `<p class="desc">${esc(d.desc)}</p>` : ""}</div>
+      <span class="price">${d.price ? esc(d.price) : '<span class="muted">—</span>'}</span>
+    </div>
+    ${showWhere ? `<p class="where">${flag(d.country)}${esc(d.booth)}${d.where ? ` · ${esc(d.where)}` : ""}<button class="linkbtn" data-jump="${esc(d.anchor)}">${icon("map")}Map</button></p>` : ""}
     <div class="chips">${chips.join("")}</div>
-    ${fam.length ? `<div class="fam-row"><span>${fam.map((x) => `<span class="avatar">${esc(x.m.emoji || "🥤")}</span>`).join("")}</span>
+    ${fam.length ? `<div class="fam-row"><span style="display:inline-flex">${fam.map((x) => avatar(x.m.emoji)).join("")}</span>
       <span>${fam.map((x) => esc(x.m.name) + (x.it.rating ? ` ${x.it.rating}★` : "")).join(", ")}</span></div>` : ""}
     ${mine.note ? `<p class="my-note">“${esc(mine.note)}”</p>` : ""}
     <div class="actions">
-      <button class="btn ${mine.tried ? "on-tried" : ""}" data-act="tried">${mine.tried ? "✓ Tried" : "Tried it"}</button>
+      <button class="btn ${mine.tried ? "on-tried" : ""}" data-act="tried">${icon("check")}${mine.tried ? "Tried" : "Tried it"}</button>
       <span class="stars">${stars}</span>
-      <button class="btn icon push ${mine.want ? "on-want" : ""}" data-act="want" aria-label="Want to try">${mine.want ? "♥" : "♡"}</button>
-      <button class="btn icon ghost" data-act="more" aria-label="More">•••</button>
+      <button class="btn icon push ${mine.want ? "on-want" : ""}" data-act="want" aria-label="Want to try">${icon("heart")}</button>
+      <button class="btn icon ghost" data-act="more" aria-label="More">${icon("more")}</button>
     </div>
   </article>`;
 }
@@ -751,10 +960,9 @@ function renderList() {
     body = `<div class="stop">${keys.map((k) => {
       const a = anchorOf(k) || { name: k };
       const ds = groups[k];
-      const flag = a.kind === "pavilion" ? countryOf(k === "america" ? "usa" : k).flag : (ds[0].country !== "park" ? countryOf(ds[0].country).flag : "🍹");
-      const dist = state.me_pos && geo ? ` · ~${Math.round(Math.hypot(geo.pts[k].x - state.me_pos.x, geo.pts[k].y - state.me_pos.y) / 80)} min walk` : "";
-      return `<div class="stop-head"><span class="big">${flag}</span><div><h3>${esc(a.name)}</h3><small>${ds.length} drink${ds.length > 1 ? "s" : ""}${dist}</small></div>
-        <button class="btn ghost push" data-jump="${esc(k)}">🗺️</button></div>
+      const mins = walkMins(k);
+      return `<div class="stop-head">${spotArt(k, ds)}<div><h3>${esc(a.name)}</h3><small>${ds.length} drink${ds.length > 1 ? "s" : ""}${mins ? ` · ${icon("walk")} ~${mins} min` : ""}</small></div>
+        <button class="btn icon ghost push" data-jump="${esc(k)}" aria-label="Show on map">${icon("map")}</button></div>
         <div class="drinks">${ds.map((d) => drinkCard(d)).join("")}</div>`;
     }).join("")}</div>`;
   } else {
@@ -765,12 +973,11 @@ function renderList() {
     body = `<div class="drinks">${sorted.map((d) => drinkCard(d, { showWhere: true })).join("")}</div>`;
   }
   return `
-    <input class="search" id="q" type="search" placeholder="Search drinks, booths, ingredients…" value="${esc(f.q)}" autocomplete="off" />
-    <div class="filter-row">${TYPE_GROUPS.map(([k, l]) => `<button class="chip-btn ${f.group === k ? "on" : ""}" data-group="${k}">${l}</button>`).join("")}</div>
-    <div class="filter-row">${ONLY.map(([k, l]) => `<button class="chip-btn ${f.only === k ? "on" : ""}" data-only="${k}">${l}</button>`).join("")}
-      <button class="chip-btn toggle ${f.fest ? "on" : ""}" data-layer="fest">${f.fest ? "✓ " : ""}Festival</button>
-      <button class="chip-btn toggle ${f.yr ? "on" : ""}" data-layer="yr">${f.yr ? "✓ " : ""}Year-round</button></div>
-    <div style="display:flex;justify-content:space-between;align-items:center">
+    <h2 class="section-title">The menu</h2>
+    <p class="section-sub">${esc(festLabel())} plus year-round pavilion drinks</p>
+    <div class="search-wrap">${icon("search")}<input class="search" id="q" type="search" placeholder="Search drinks, booths, ingredients…" value="${esc(f.q)}" autocomplete="off" /></div>
+    <div class="list-filters">${filterPanel()}</div>
+    <div class="count-row">
       <p class="count-line">${list.length} drink${list.length === 1 ? "" : "s"}</p>
       <select class="sort" id="sort" aria-label="Sort">
         <option value="walk" ${f.sort === "walk" ? "selected" : ""}>Walk the loop</option>
@@ -780,7 +987,7 @@ function renderList() {
         <option value="name" ${f.sort === "name" ? "selected" : ""}>A–Z</option>
       </select>
     </div>
-    ${list.length ? body : `<div class="empty"><div class="e">🤷</div><p>No drinks match.</p></div>`}`;
+    ${list.length ? body : `<div class="empty"><div class="e">${icon("search")}</div><p>No drinks match.</p></div>`}`;
 }
 
 function renderFamily() {
@@ -788,7 +995,7 @@ function renderFamily() {
     const items = memberItems(m);
     return { m, tried: items.filter((x) => x.it.tried).length, stamps: stampsFor(m).size, now: items.filter((x) => x.it.tried && x.current).length };
   }).sort((a, b) => b.now - a.now || b.tried - a.tried);
-  if (!ms.length) return `<div class="empty"><div class="e">👨‍👩‍👧‍👦</div><p>No one has checked in yet.<br/>Text this site's link to the family — everyone picks their name on their own phone.</p></div>`;
+  if (!ms.length) return `<div class="empty"><div class="e">${icon("family")}</div><p>No one has checked in yet.<br/>Text this site's link to the family — everyone picks their name on their own phone.</p></div>`;
 
   const rated = D().drinks.map((d) => {
     const rs = familyOn(d.id).map((x) => x.it.rating).filter(Boolean);
@@ -798,32 +1005,49 @@ function renderFamily() {
   const feed = [];
   for (const m of members()) for (const x of memberItems(m)) if (x.it.at) feed.push({ m, x });
   feed.sort((a, b) => b.x.it.at.localeCompare(a.x.it.at));
+  const starRow = (n) => `<span class="feed-stars">${Array.from({ length: n }, () => icon("star")).join("")}</span>`;
 
   return `
-    <h2 class="section-title">Family leaderboard</h2>
+    <h2 class="section-title">Family</h2>
     <p class="section-sub">${esc(festLabel())} · updates live from everyone's phones</p>
-    <div class="card">${ms.map((x, i) => `
-      <div class="leader"><span class="rank">${i + 1}</span><span class="big">${esc(x.m.emoji || "🥤")}</span>
+    <div class="card"><h3>${icon("trophy")}Leaderboard</h3><div class="rows">${ms.map((x, i) => `
+      <div class="leader"><span class="rank">${i + 1}</span>${avatar(x.m.emoji)}
         <div class="who"><b>${esc(x.m.name)}</b><small>${x.stamps} countr${x.stamps === 1 ? "y" : "ies"} stamped · ${x.tried} all-time</small></div>
-        <div class="score">${x.now}<small>this menu</small></div></div>`).join("")}</div>
-    ${rated.length ? `<div class="card"><h3>⭐ Family favorites</h3>${rated.map((x) => `
-      <div class="leader"><span class="big">${countryOf(x.d.country).flag}</span>
+        <div class="score">${x.now}<small>this menu</small></div></div>`).join("")}</div></div>
+    ${rated.length ? `<div class="card"><h3>${icon("star")}Family favorites</h3><div class="rows">${rated.map((x) => `
+      <div class="leader">${flag(x.d.country)}
         <div class="who"><b>${esc(x.d.name)}</b><small>${esc(x.d.booth)} · ${x.n} rating${x.n > 1 ? "s" : ""}</small></div>
-        <div class="score">${x.avg.toFixed(1)}★</div></div>`).join("")}</div>` : ""}
-    ${wanted.length ? `<div class="card"><h3>♥ Most wanted</h3>${wanted.map((x) => `
-      <div class="leader"><span class="big">${countryOf(x.d.country).flag}</span>
+        <div class="score">${x.avg.toFixed(1)}<small>avg stars</small></div></div>`).join("")}</div></div>` : ""}
+    ${wanted.length ? `<div class="card"><h3>${icon("heart")}Most wanted</h3><div class="rows">${wanted.map((x) => `
+      <div class="leader">${flag(x.d.country)}
         <div class="who"><b>${esc(x.d.name)}</b><small>${esc(x.d.booth)}${x.d.price ? ` · ${esc(x.d.price)}` : ""}</small></div>
-        <div class="score">${x.n}<small>want it</small></div></div>`).join("")}</div>` : ""}
-    <div class="card"><h3>🕒 Recent check-ins</h3>${feed.slice(0, 25).map(({ m, x }) => `
-      <div class="feed-item"><span class="big">${esc(m.emoji || "🥤")}</span><div>
-        <b>${esc(m.name)}</b> ${x.it.tried ? "tried" : "wants"} <b>${esc(x.name)}</b> ${countryOf(x.country).flag}
-        ${x.it.rating ? ` — ${"★".repeat(x.it.rating)}` : ""}
+        <div class="score">${x.n}<small>want it</small></div></div>`).join("")}</div></div>` : ""}
+    <div class="card"><h3>${icon("clock")}Recent check-ins</h3><div class="rows">${feed.slice(0, 25).map(({ m, x }) => `
+      <div class="feed-item">${avatar(m.emoji)}<div>
+        <b>${esc(m.name)}</b> ${x.it.tried ? "tried" : "wants"} <b>${esc(x.name)}</b> ${flag(x.country)}
+        ${x.it.rating ? ` ${starRow(x.it.rating)}` : ""}
         ${x.it.note ? `<div class="my-note">“${esc(x.it.note)}”</div>` : ""}
-        <time>${ago(x.it.at)}${x.current ? "" : ` · ${esc(x.festival)}`}</time></div></div>`).join("") || `<p class="muted">Nothing yet.</p>`}</div>`;
+        <time>${ago(x.it.at)}${x.current ? "" : ` · ${esc(x.festival)}`}</time></div></div>`).join("") || `<p class="muted" style="padding:12px 0">Nothing yet.</p>`}</div></div>`;
+}
+
+const STAMP_INK = ["#f2c46a", "#f59a86", "#a9d4f2", "#b9e3a0", "#e3b5f0"];
+function stampSVG(c, got, i) {
+  const ink = got ? STAMP_INK[i % STAMP_INK.length] : "#efe6cf";
+  const rot = got ? ((i * 37) % 26) - 13 : 0;
+  const name = c.name.replace("United Kingdom", "U.K.").replace("United States", "U.S.A.").toUpperCase();
+  return `<div class="stamp ${got ? "" : "empty-s"}" title="${esc(c.name)}">
+    <svg class="st" viewBox="-40 -40 80 80" style="transform:rotate(${rot}deg)" aria-hidden="true">
+      <defs><path id="stT-${c.id}" d="M-26 0a26 26 0 1 1 52 0"/><path id="stB-${c.id}" d="M-29 0a29 29 0 1 0 58 0"/></defs>
+      <circle r="37" fill="none" stroke="${ink}" stroke-width="2.4" ${got ? "" : 'stroke-dasharray="3 3"'}/>
+      <circle r="21" fill="none" stroke="${ink}" stroke-width=".8"/>
+      <text fill="${ink}" font-family="Barlow Condensed, sans-serif" font-weight="800" font-size="${name.length > 11 ? 7.5 : 9}" letter-spacing="1.2"><textPath href="#stT-${c.id}" startOffset="50%" text-anchor="middle">${esc(name)}</textPath></text>
+      <text fill="${ink}" font-family="Barlow Condensed, sans-serif" font-weight="700" font-size="6.5" letter-spacing="2.4" dominant-baseline="hanging"><textPath href="#stB-${c.id}" startOffset="50%" text-anchor="middle">★ EPCOT ★</textPath></text>
+      <svg x="-13.5" y="-9" width="27" height="18" viewBox="0 0 30 20" preserveAspectRatio="xMidYMid slice" style="${got ? "" : "filter:grayscale(1)"}">${flagBody(c.id)}</svg>
+    </svg></div>`;
 }
 
 function renderPassport() {
-  if (!state.me) return `<div class="empty"><div class="e">🎟️</div><p>Pick your name to start your passport.</p><button class="btn primary" data-join>Join the family</button></div>`;
+  if (!state.me) return `<div class="empty"><div class="e">${icon("passport")}</div><p>Pick your name to start your passport.</p><button class="btn accent" data-join>Join the family</button></div>`;
   const rec = myRec();
   const items = memberItems(rec);
   const tried = items.filter((x) => x.it.tried);
@@ -836,20 +1060,20 @@ function renderPassport() {
 
   return `
     <div class="passport">
-      <h2>${esc(state.me.emoji)} ${esc(state.me.name)}</h2>
-      <div class="meta">EPCOT World Showcase Passport · ${tried.length} drink${tried.length === 1 ? "" : "s"} · ${got.size} stamp${got.size === 1 ? "" : "s"}${spent ? ` · ~$${spent.toFixed(0)} this menu` : ""}</div>
-      <div class="stamps">${cs.map((c) => `<div class="stamp-cell ${got.has(c.id) ? "got" : ""}" title="${esc(c.name)}">${c.flag}<small>${esc(c.name.replace("United ", "U. "))}</small></div>`).join("")}</div>
-      <div style="height:10px"></div>
+      <span class="seal">${icon("globe")}</span>
+      <div class="passport-head">${avatar(state.me.emoji)}<div><div class="eyebrow">World Showcase Passport</div><h2>${esc(state.me.name)}</h2></div></div>
+      <div class="meta"><span><b>${tried.length}</b>drinks</span><span><b>${got.size}/${cs.length}</b>stamps</span>${spent ? `<span><b>$${spent.toFixed(0)}</b>this menu</span>` : ""}</div>
+      <div class="stamps">${cs.map((c, i) => stampSVG(c, got.has(c.id), i)).join("")}</div>
     </div>
-    ${want.length ? `<p class="group-label">♥ Want to try (${want.length})</p><div class="drinks">${want.map((x) => drinkCard(x.d, { showWhere: true })).join("")}</div>` : ""}
+    ${want.length ? `<p class="group-label">${icon("heart")}Want to try (${want.length})</p><div class="drinks">${want.map((x) => drinkCard(x.d, { showWhere: true })).join("")}</div>` : ""}
     ${Object.entries(byFest).map(([fest, xs]) => `
-      <p class="group-label">✓ ${esc(fest)} (${xs.length})</p>
+      <p class="group-label">${icon("check")}${esc(fest)} (${xs.length})</p>
       <div class="drinks">${xs.sort((a, b) => (b.it.rating || 0) - (a.it.rating || 0)).map((x) => x.d ? drinkCard(x.d, { showWhere: true }) : `
-        <article class="drink tried"><div class="drink-top"><h4>${esc(x.name)}</h4><span class="price">${esc(x.price)}</span></div>
-          <p class="where">${countryOf(x.country).flag} ${esc(x.booth)} · no longer on the menu</p>
-          <div class="chips">${x.it.rating ? `<span class="chip">${"★".repeat(x.it.rating)}</span>` : ""}</div>
+        <article class="drink tried"><div class="drink-top"><span class="drink-type">${icon(TYPE_ICON[x.type] || "glass")}</span><div class="drink-title"><h4>${esc(x.name)}</h4></div><span class="price">${esc(x.price)}</span></div>
+          <p class="where">${flag(x.country)}${esc(x.booth)} · no longer on the menu</p>
+          <div class="chips">${x.it.rating ? `<span class="chip star">${icon("star")}${x.it.rating}</span>` : ""}</div>
           ${x.it.note ? `<p class="my-note">“${esc(x.it.note)}”</p>` : ""}</article>`).join("")}</div>`).join("")
-    || `<div class="empty"><div class="e">🍹</div><p>Nothing yet — pick a pavilion on the map and start sipping!</p></div>`}`;
+    || `<div class="empty"><div class="e">${icon("glass")}</div><p>Nothing yet — pick a pavilion on the map and start sipping.</p></div>`}`;
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -860,16 +1084,16 @@ function closeSheet() { $("#sheet").hidden = true; $("#sheetBody").innerHTML = "
 function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast._t); toast._t = setTimeout(() => (t.hidden = true), 2600); }
 
 function joinSheet() {
-  let emoji = state.me?.emoji || EMOJIS[0];
+  let emoji = state.me?.emoji || "@" + AVATARS[0][0];
   const existing = members();
   openSheet(`
     <h2>Who's sipping?</h2>
     <p class="muted">Pick your name so your check-ins show up for the whole family.</p>
-    ${existing.length ? `<div class="member-list">${existing.map((m) => `<button class="btn" data-pick="${esc(m.name)}" data-emoji="${esc(m.emoji || "🥤")}">${esc(m.emoji || "🥤")} ${esc(m.name)}</button>`).join("")}</div><p class="muted" style="margin-top:14px">…or add yourself:</p>` : ""}
+    ${existing.length ? `<div class="member-list">${existing.map((m) => `<button class="btn" data-pick="${esc(m.name)}" data-emoji="${esc(m.emoji || "")}">${avatar(m.emoji)} ${esc(m.name)}</button>`).join("")}</div><p class="muted" style="margin-top:14px">…or add yourself:</p>` : ""}
     <label class="field"><span>Your name</span><input id="joinName" maxlength="24" placeholder="e.g. Mom, Jake, Grandpa" value="${esc(state.me?.name || "")}" /></label>
-    <div class="field"><span>Pick an icon</span><div class="emoji-pick">${EMOJIS.map((e) => `<button type="button" data-emo="${e}" class="${e === emoji ? "on" : ""}">${e}</button>`).join("")}</div></div>
+    <div class="field"><span>Pick a badge</span><div class="av-pick">${AVATARS.map(([k]) => `<button type="button" data-emo="@${k}" aria-label="${k}" class="${"@" + k === emoji ? "on" : ""}">${avatar("@" + k)}</button>`).join("")}</div></div>
     ${D()?.requiresCode ? `<label class="field"><span>Family code</span><input id="joinCode" autocomplete="off" value="${esc(state.code)}" placeholder="Ask whoever set up the site" /></label>` : ""}
-    <button class="btn primary block" id="joinGo">Save</button>
+    <button class="btn accent block" id="joinGo">Save</button>
     ${state.me ? `<button class="btn ghost block" id="logout" style="margin-top:6px">Switch person on this phone</button>` : ""}
   `, (el) => {
     const saveCode = () => { const c = $("#joinCode")?.value.trim(); if (c != null) { state.code = c; ls.set(LS.code, c); } };
@@ -892,10 +1116,10 @@ function joinSheet() {
 function askForCode() {
   openSheet(`<h2>Family code</h2><p class="muted">Enter the family code to save changes.</p>
     <label class="field"><span>Code</span><input id="codeIn" autocomplete="off" value="${esc(state.code)}" /></label>
-    <button class="btn primary block" id="codeGo">Unlock</button>`, (el) => {
+    <button class="btn accent block" id="codeGo">Unlock</button>`, (el) => {
     $("#codeGo", el).onclick = async () => {
       state.code = $("#codeIn").value.trim(); ls.set(LS.code, state.code);
-      try { await api("verify", { method: "POST", body: {} }); closeSheet(); toast("Unlocked 🎉"); } catch {}
+      try { await api("verify", { method: "POST", body: {} }); closeSheet(); toast("Unlocked"); } catch {}
     };
   });
 }
@@ -911,16 +1135,16 @@ function addSheet() {
     <label class="field"><span>Drink name *</span><input id="aName" maxlength="90" placeholder="e.g. Frozen Grey Goose Orange Slush" /></label>
     <label class="field"><span>Where is it? (map spot)</span><select id="aAnchor">${opts}</select></label>
     <label class="field"><span>Booth / bar name</span><input id="aBooth" maxlength="60" placeholder="e.g. Les Vins des Chefs de France" /></label>
-    <label class="field"><span>Country</span><select id="aCountry">${D().countries.map((c) => `<option value="${c.id}" ${c.id === guessCountry ? "selected" : ""}>${c.flag} ${esc(c.name)}</option>`).join("")}</select></label>
+    <label class="field"><span>Country</span><select id="aCountry">${D().countries.map((c) => `<option value="${c.id}" ${c.id === guessCountry ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select></label>
     <label class="field"><span>Type</span><select id="aType">${D().types.map((t) => `<option value="${t}">${TYPE_LABEL[t]}</option>`).join("")}</select></label>
     <label class="field"><span>Price</span><input id="aPrice" maxlength="30" placeholder="$14.00" /></label>
     <label class="field"><span>What's in it?</span><textarea id="aDesc" rows="2" maxlength="240"></textarea></label>
-    <label class="field" style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="aYr" style="width:auto" /> <span style="margin:0">It's on the year-round menu (not just this festival)</span></label>
-    <button class="btn primary block" id="aGo">Add for everyone</button>`, (el) => {
+    <label class="check-field"><input type="checkbox" id="aYr" /> <span>It's on the year-round menu (not just this festival)</span></label>
+    <button class="btn accent block" id="aGo">Add for everyone</button>`, (el) => {
     $("#aGo", el).onclick = async () => {
       const body = { member: state.me.name, name: $("#aName").value, anchor: $("#aAnchor").value, country: $("#aCountry").value, booth: $("#aBooth").value, type: $("#aType").value, price: $("#aPrice").value, desc: $("#aDesc").value, yearRound: $("#aYr").checked };
       if (!body.name.trim()) return toast("Give it a name");
-      try { await api("drinks", { method: "POST", body }); closeSheet(); await load(); toast("Added! 🍹"); } catch (e) { toast(e.message); }
+      try { await api("drinks", { method: "POST", body }); closeSheet(); await load(); toast("Added for everyone"); } catch (e) { toast(e.message); }
     };
   });
 }
@@ -929,13 +1153,13 @@ function moreSheet(d) {
   const mine = myItem(d.id);
   openSheet(`
     <h2>${esc(d.name)}</h2>
-    <p class="muted">${countryOf(d.country).flag} ${esc(d.booth)}${d.price ? ` · ${esc(d.price)}` : ""}</p>
+    <p class="muted" style="display:flex;align-items:center;gap:8px">${flag(d.country)} ${esc(d.booth)}${d.price ? ` · ${esc(d.price)}` : ""}</p>
     <label class="field"><span>Your tasting note</span><textarea id="noteIn" rows="3" maxlength="280" placeholder="Too sweet? Worth it? Get the big one?">${esc(mine.note || "")}</textarea></label>
-    <button class="btn primary block" id="saveNote">Save note</button>
+    <button class="btn accent block" id="saveNote">Save note</button>
     <div style="height:10px"></div>
-    <button class="btn block" id="soldOut">${d.status?.soldOut ? "✅ It's back — clear sold out" : "🚫 Sold out today"}</button>
-    <button class="btn ghost block" id="toMap" style="margin-top:6px">🗺️ Show on map</button>
-    ${d.source === "family" ? `<button class="btn ghost block" id="del" style="margin-top:6px;color:#d8433a">Delete this family-added drink</button>` : ""}
+    <button class="btn block" id="soldOut">${d.status?.soldOut ? `${icon("check")}It's back — clear sold out` : `${icon("ban")}Sold out today`}</button>
+    <button class="btn ghost block" id="toMap" style="margin-top:6px">${icon("map")}Show on map</button>
+    ${d.source === "family" ? `<button class="btn ghost danger block" id="del" style="margin-top:6px">${icon("trash")}Delete this family-added drink</button>` : ""}
   `, (el) => {
     $("#saveNote", el).onclick = async () => { await checkin(d.id, { note: $("#noteIn").value }); closeSheet(); toast("Note saved"); };
     $("#toMap", el).onclick = () => { closeSheet(); jumpTo(d.anchor); };
@@ -966,7 +1190,7 @@ function infoSheet() {
     </dl>
     ${src ? `<p class="group-label">Sources</p>${src}` : ""}
     <div style="height:14px"></div>
-    ${st.auto ? `<button class="btn primary block" id="refreshNow" ${busy ? "disabled" : ""}>${busy ? "Updating… (takes a few minutes)" : "🔄 Refresh the menu now"}</button>` : ""}
+    ${st.auto ? `<button class="btn accent block" id="refreshNow" ${busy ? "disabled" : ""}>${busy ? "Updating… (takes a few minutes)" : `${icon("refresh")}Refresh the menu now`}</button>` : ""}
     <p class="muted" style="font-size:.78rem;margin-top:12px">Menus are researched from Disney's announcements and trusted Disney news sites. Prices can change at the booth — if something's off, fix it from the drink's ••• menu or add it with ＋.</p>
   `, (el) => {
     $("#refreshNow", el)?.addEventListener("click", async () => {
@@ -1017,6 +1241,8 @@ document.addEventListener("click", (ev) => {
   }
   if (t.hasAttribute("data-closespot")) { state.sel = null; state.drawer = "peek"; render(); return; }
   if (t.hasAttribute("data-join")) return joinSheet();
+  if (t.hasAttribute("data-ftoggle")) return setFiltersOpen(!state.filtersOpen);
+  if (t.hasAttribute("data-freset")) { Object.assign(state.filters, { group: "all", only: "all", fest: true, yr: true }); render(); return; }
   if (t.dataset.group) { state.filters.group = t.dataset.group; render(); return; }
   if (t.dataset.only) { state.filters.only = state.filters.only === t.dataset.only && t.dataset.only !== "all" ? "all" : t.dataset.only; render(); return; }
   if (t.dataset.layer) { state.filters[t.dataset.layer] = !state.filters[t.dataset.layer]; render(); return; }
@@ -1049,6 +1275,11 @@ $("#festBtn").onclick = () => D() && infoSheet();
 $("#addBtn").onclick = addSheet;
 $("#locBtn").onclick = toggleLocate;
 $("#fitBtn").onclick = () => { if (fitVB) { vb = { ...fitVB }; fitMap(); renderMarkers(); } };
+const zoomBtn = (f) => { if (!zoomAtFn) return; const r = $("#map").getBoundingClientRect(); zoomAtFn(r.left + r.width / 2, r.top + r.height * 0.42, f); clearTimeout(zoomBtn.t); zoomBtn.t = setTimeout(renderMarkers, 120); };
+$("#zoomIn").onclick = () => zoomBtn(1.5);
+$("#zoomOut").onclick = () => zoomBtn(1 / 1.5);
+document.querySelectorAll("[data-icon]").forEach((b) => b.insertAdjacentHTML("afterbegin", icon(b.dataset.icon)));
+state.filtersOpen = ls.get(LS.fopen, false);
 
 setInterval(() => {
   if (document.visibilityState !== "visible" || !$("#sheet").hidden || document.activeElement?.id === "q") return;

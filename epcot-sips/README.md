@@ -4,10 +4,10 @@ A phone app for the whole family, built around a live map of EPCOT. It keeps its
 
 ## What it does
 
-- **Map of EPCOT.** The map is drawn from the pavilions' real GPS coordinates. Each pavilion has its own landmark icon (pyramid, pagoda, Eiffel Tower and so on) with a drink count, and festival booths show as flag pins. North is at the bottom so it matches Disney's park maps.
+- **Map of EPCOT.** The map is drawn from the pavilions' real GPS coordinates. It's drawn like an illustrated park map: lagoon, promenade, trees, Future World buildings and a hand-drawn landmark for each pavilion (pyramid, pagoda, Eiffel Tower and so on) with a drink count. Festival booths show as flag pins. North is at the bottom so it matches Disney's park maps.
   - **Moving around:** pinch to zoom, drag to pan. Tap a pavilion to open a drawer with its drinks.
-  - **Your location:** the ◎ button shows a blue "you are here" dot and walking times.
-  - **Filters:** turn the festival and year-round drinks on or off. Filter by cocktails, frozen, beer, wine, kid-friendly, coffee, open now, new this week, haven't tried, or your wishlist.
+  - **Your location:** the locate button shows a blue "you are here" dot and walking times.
+  - **Filters:** a collapsible panel. Turn the festival and year-round drinks on or off. Filter by cocktails, frozen, beer, wine, kid-friendly, coffee, open now, new this week, haven't tried, or your wishlist.
 - **List view.** Shows the same drinks in walking order around the park. You can also sort by closest to you, cheapest, or family favorites.
 - **Family.** Each person picks their name on their own phone and checks in drinks (tried it, a 1–5 ★ rating, a ♥ wishlist, tasting notes). The Family tab has a leaderboard, favorites, a most-wanted list and a live feed of check-ins.
 - **Passport.** Country stamps plus every drink you've tried, grouped by festival, so what you had in September is still there in January.
@@ -80,4 +80,4 @@ data/drinks.mjs               starter menu / fallback
 
 Ratings are saved with a snapshot of each drink, so your passport keeps its history after a festival's menu is replaced.
 
-Please enjoy responsibly. The 🧃 Kid-friendly filter shows every non-alcoholic drink.
+Please enjoy responsibly. The Kid-friendly filter shows every non-alcoholic drink.
