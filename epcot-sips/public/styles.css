@@ -124,24 +124,30 @@ input, select, textarea { font: inherit; color: inherit; }
 /* ── Map ────────────────────────────────────────────── */
 .map-view { position: fixed; inset: 0; bottom: calc(var(--tabbar) + env(safe-area-inset-bottom)); overflow: hidden; background: var(--forest); }
 body:not([data-tab="map"]) .map-view { display: none; }
-#map { width: 100%; height: 100%; display: block; touch-action: none; user-select: none; -webkit-user-select: none; }
-#map text { font-family: var(--display); pointer-events: none; }
+.map-stage { position: absolute; inset: 0; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+#map { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; overflow: visible; transform-origin: 0 0; will-change: transform; backface-visibility: hidden; }
+.map-overlay { position: absolute; inset: 0; pointer-events: none; }
+.map-overlay > div { position: absolute; left: 0; top: 0; will-change: transform; backface-visibility: hidden; }
+.map-overlay text { font-family: var(--display); pointer-events: none; }
 .map-view::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: #000; opacity: var(--map-dim); z-index: 1; }
 .map-view::before { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 1; box-shadow: inset 0 0 80px rgba(20,30,15,.35); }
 
-.marker { cursor: pointer; }
+/* Markers (HTML overlay; each holds a small SVG) */
+.marker { pointer-events: none; cursor: pointer; }
+.marker svg { display: block; overflow: visible; }
+.marker svg > * { pointer-events: auto; }
 .marker .hit { fill: transparent; }
 .marker.dim .art { opacity: .5; filter: saturate(.25); }
 .marker.dim .plate-bg { fill: #6b6f73; }
 .marker .plate-bg { fill: var(--chrome); }
-.marker .plate-t { fill: #f3efe6; font-family: var(--display); font-weight: 700; font-size: 9.5px; letter-spacing: .08em; text-anchor: middle; dominant-baseline: central; text-transform: uppercase; }
+.marker .plate-t { fill: #f3efe6; font-weight: 700; font-size: 9.5px; letter-spacing: .08em; text-anchor: middle; dominant-baseline: central; text-transform: uppercase; }
 .marker.sel .plate-bg { fill: var(--accent); }
+.marker .sel-ring { display: none; fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 3; transform-box: fill-box; transform-origin: center; animation: spin 14s linear infinite; }
 .marker.sel .sel-ring { display: block; }
-.marker .sel-ring { display: none; fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 3; animation: spin 14s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .marker .tag { fill: var(--accent); stroke: #fff; stroke-width: 1.2; }
 .marker .tag.soon { fill: var(--accent-2); }
-.marker .tag-t { fill: #fff; font-family: var(--display); font-size: 10px; font-weight: 800; text-anchor: middle; dominant-baseline: central; }
+.marker .tag-t { fill: #fff; font-size: 10px; font-weight: 800; text-anchor: middle; dominant-baseline: central; }
 .marker .tried-tag { fill: var(--ok); stroke: #fff; stroke-width: 1.2; }
 .marker .pin-body { fill: var(--chrome); stroke: #fff; stroke-width: 1.4; }
 .marker.sel .pin-body { fill: var(--accent); }
@@ -149,13 +155,18 @@ body:not([data-tab="map"]) .map-view { display: none; }
 .marker.dim .pin-body { fill: #6b6f73; }
 .marker.dim .pin-flag { opacity: .45; }
 .marker .booth-t { fill: var(--label); font-weight: 700; font-size: 9px; text-anchor: middle; paint-order: stroke; stroke: var(--label-halo); stroke-width: 3px; stroke-linejoin: round; letter-spacing: .04em; text-transform: uppercase; }
-.fw-label { fill: #2c3a26; font-weight: 700; font-size: 9.5px; letter-spacing: .1em; text-anchor: middle; paint-order: stroke; stroke: var(--label-halo); stroke-width: 3px; stroke-linejoin: round; text-transform: uppercase; }
-.land-label { fill: #fdf8ea; font-weight: 800; font-size: 11px; letter-spacing: .16em; text-anchor: middle; text-transform: uppercase; paint-order: stroke; stroke: rgba(30,50,25,.55); stroke-width: 3px; stroke-linejoin: round; }
-.water-label { fill: #fff; opacity: .9; font-weight: 800; font-size: 14px; letter-spacing: .22em; text-anchor: middle; font-style: italic; }
-.water-label.sm { font-size: 9px; letter-spacing: .6em; opacity: .7; font-style: normal; }
-.gate-label { fill: #fdf8ea; font-weight: 800; font-size: 9px; letter-spacing: .2em; text-anchor: middle; paint-order: stroke; stroke: var(--chrome); stroke-width: 3.2px; stroke-linejoin: round; }
-.me-dot { fill: #2f7bf5; stroke: #fff; stroke-width: 2.5; }
-.me-pulse { fill: #2f7bf5; opacity: .25; animation: pulse 2s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+
+/* Map labels */
+.mlabel span { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); white-space: nowrap; font-family: var(--display); text-transform: uppercase; line-height: 1;
+  --h: var(--label-halo); text-shadow: 1px 1px 0 var(--h), -1px 1px 0 var(--h), 1px -1px 0 var(--h), -1px -1px 0 var(--h), 0 1.5px 0 var(--h), 0 -1.5px 0 var(--h), 1.5px 0 0 var(--h), -1.5px 0 0 var(--h); }
+.mlabel.water span { color: #fff; opacity: .9; font-weight: 800; font-size: 14px; letter-spacing: .22em; font-style: italic; text-shadow: none; }
+.mlabel.water.sm span { font-size: 9px; letter-spacing: .6em; opacity: .7; font-style: normal; }
+.mlabel.land span { color: #fdf8ea; font-weight: 800; font-size: 11px; letter-spacing: .16em; --h: rgba(30,50,25,.6); }
+.mlabel.fw span { color: #2c3a26; font-weight: 700; font-size: 9.5px; letter-spacing: .1em; }
+.mlabel.gate span { color: #fdf8ea; font-weight: 800; font-size: 9px; letter-spacing: .2em; --h: var(--chrome); }
+.me { width: 24px; height: 24px; }
+.me-dot { position: absolute; left: 5px; top: 5px; width: 14px; height: 14px; border-radius: 50%; background: #2f7bf5; border: 2.5px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+.me-pulse { position: absolute; inset: 0; border-radius: 50%; background: #2f7bf5; animation: pulse 2s ease-out infinite; }
 @keyframes pulse { from { transform: scale(.6); opacity: .5; } to { transform: scale(2.4); opacity: 0; } }
 
 /* Map chrome: filter bar, tools, compass, scale */

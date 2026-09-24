@@ -203,7 +203,10 @@ function render() {
   renderHeader();
   if (state.tab === "map") {
     const sig = D().menu.checkedAt + "|" + D().menu.yearRoundCheckedAt;
+    const was = { ...stageSize };
+    measureStage();
     if (mapBuiltFor !== sig) { buildMap(); mapBuiltFor = sig; }
+    else if (was.W !== stageSize.W || was.H !== stageSize.H) fitMap();
     renderLayers();
     renderMarkers();
     renderDrawer();
@@ -225,6 +228,7 @@ const NS = "http://www.w3.org/2000/svg";
 let geo = null;          // projection + shapes
 let vb = null;           // current viewBox {x, y, w, h}
 let fitVB = null;
+let view = null;          // what is on screen right now (may differ from vb mid-gesture)
 
 function project(lat, lng) {
   return { x: -(lng - geo.lng0) * Math.cos(geo.lat0 * Math.PI / 180) * 111320, y: (lat - geo.lat0) * 110540 };
@@ -344,7 +348,7 @@ function buildMap() {
     <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="3"/></filter>`;
 
   const world = el("g", { id: "world" }, svg);
-  el("rect", { x: -4000, y: -4000, width: 8000, height: 8000, fill: "url(#forestP)" }, world);
+  el("rect", { x: C.x - 1600, y: C.y - 1600, width: 3200, height: 3200, fill: "url(#forestP)" }, world);
   // Land + berm
   el("path", { d: landD, fill: "#2f5528", opacity: .5, transform: "translate(5 7)", filter: "url(#soft)" }, world);
   el("path", { d: landD, fill: "var(--grass)", stroke: "#3d6634", "stroke-width": 5 }, world);
@@ -473,11 +477,6 @@ function buildMap() {
   const sg = el("g", { transform: `translate(${se.x} ${se.y}) scale(1.9)` }, world);
   sg.innerHTML = spaceshipEarth();
 
-  // Layers that don't scale with zoom
-  el("g", { id: "labels" }, world);
-  el("g", { id: "markers" }, world);
-  el("g", { id: "meLayer" }, world);
-
   // Bounds → initial fit
   const ids = [...ring, "spaceship-earth", "the-land", "mission-space"];
   const xs = ids.map((i) => P[i].x), ys = ids.map((i) => P[i].y);
@@ -486,33 +485,26 @@ function buildMap() {
   initPanZoom();
 }
 
-function renderAreaLabels() {
-  const g = $("#labels");
-  if (!g) return;
-  g.innerHTML = "";
+// Map name labels, as an HTML overlay (they stay crisp and never scale).
+function areaLabelsHTML(S) {
   const P = geo.pts, C = geo.center;
-  const u = vb.w / $("#map").clientWidth;
-  const add = (x, y, text, cls) => {
-    const t = el("text", { class: cls, transform: `translate(${x.toFixed(1)} ${y.toFixed(1)}) scale(${u})` }, g);
-    t.textContent = text;
-  };
-  add(C.x, C.y - 4, "WORLD SHOWCASE", "water-label");
-  add(C.x, C.y + 12, "LAGOON", "water-label sm");
-  add(P.communicore.x, P.communicore.y + 62, "World Celebration", "land-label");
+  let html = "";
+  const add = (p, text, cls) => { html += `<div class="mlabel ${cls}" data-wx="${p.x.toFixed(1)}" data-wy="${p.y.toFixed(1)}"><span>${esc(text)}</span></div>`; };
+  add({ x: C.x, y: C.y - 8 }, "World Showcase", "water");
+  add({ x: C.x, y: C.y + 10 }, "Lagoon", "water sm");
+  add({ x: P.communicore.x, y: P.communicore.y + 62 }, "World Celebration", "land");
   const mid = (a, b) => ({ x: (P[a].x + P[b].x) / 2, y: (P[a].y + P[b].y) / 2 });
   const lerp = (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
-  const disc = lerp(P.communicore, mid("test-track", "mission-space"), 0.55), nat = lerp(P.communicore, mid("the-land", "imagination"), 0.55);
-  add(disc.x, disc.y, "World Discovery", "land-label");
-  add(nat.x, nat.y, "World Nature", "land-label");
-  add(geo.entrance.x, geo.entrance.y + 4, "MAIN ENTRANCE", "gate-label");
-  add(geo.gate.x, geo.gate.y + 16, "INT'L GATEWAY", "gate-label");
+  add(lerp(P.communicore, mid("test-track", "mission-space"), 0.55), "World Discovery", "land");
+  add(lerp(P.communicore, mid("the-land", "imagination"), 0.55), "World Nature", "land");
+  add({ x: geo.entrance.x, y: geo.entrance.y }, "Main Entrance", "gate");
+  add({ x: geo.gate.x, y: geo.gate.y + 12 }, "Int'l Gateway", "gate");
   const small = [["test-track", "Test Track"], ["the-land", "The Land"], ["imagination", "Imagination!"], ["seas", "The Seas"], ["guardians", "Cosmic Rewind"], ["mission-space", "Mission: SPACE"], ["spaceship-earth", "Spaceship Earth"]];
-  const S = spots();
   for (const [id, name] of small) {
     if (S[id] && id !== "spaceship-earth") continue;
-    const p = P[id];
-    add(p.x, p.y + (id === "spaceship-earth" ? 44 : 4), name, "fw-label");
+    add({ x: P[id].x, y: P[id].y + (id === "spaceship-earth" ? 40 : 0) }, name, "fw");
   }
+  return html;
 }
 
 // Group the visible drinks by anchor → map markers.
@@ -530,39 +522,41 @@ function spots() {
 }
 
 // Markers grow a little as you zoom in, so the map feels like a map and not a sticker sheet.
-const zoomK = () => (fitVB ? fitVB.w / vb.w : 1);
+const zoomK = () => (fitVB && view ? fitVB.w / view.w : 1);
 const growPav = () => Math.max(0.9, Math.min(2.1, Math.pow(zoomK(), 0.55)));
 const growPin = () => Math.max(0.9, Math.min(1.5, Math.pow(zoomK(), 0.35)));
-const markerScale = (kind) => (vb.w / $("#map").clientWidth) * (kind === "pav" ? growPav() : growPin());
 
 function renderMarkers() {
-  const g = $("#markers");
-  if (!g || !geo) return;
-  renderAreaLabels();
+  const ov = $("#overlay");
+  if (!ov || !geo || !view) return;
   updateScale();
-  const u = vb.w / $("#map").clientWidth;
+  const pxPerM = stageSize.W / view.w;
   const S = spots();
   const rec = myRec();
   const ordered = Object.keys(D().anchors).sort((a, b) => (D().anchors[a].kind === "pavilion") - (D().anchors[b].kind === "pavilion"));
   const shown = ordered.filter((id) => S[id] || D().anchors[id].kind === "pavilion");
   const gp = growPav(), gn = growPin();
-  geo.disp = spread(shown.map((id) => ({ id, ...geo.pts[id], r: (D().anchors[id].kind === "pavilion" ? 25 * gp : 14 * gn) * u })));
-  let html = "";
+  // Spread overlapping markers apart in screen space; the offsets ride along with zoom.
+  const base = shown.map((id) => { const p = geo.pts[id], pav = D().anchors[id].kind === "pavilion"; return { id, x: (p.x - view.x) * pxPerM, y: (p.y - view.y) * pxPerM, r: pav ? 25 * gp : 14 * gn, g: pav ? gp : gn }; });
+  const disp = spread(base);
+  const off = Object.fromEntries(base.map((b) => [b.id, { dx: (disp[b.id].x - b.x) / b.g, dy: (disp[b.id].y - b.y) / b.g }]));
+  let html = areaLabelsHTML(S);
   for (const id of shown) {
     const a = D().anchors[id];
     const s = S[id];
     const isPav = a.kind === "pavilion";
     if (!s && !isPav) continue;
-    const p = geo.disp[id];
+    const p = geo.pts[id], o = off[id];
     const vis = s?.vis || [];
     const tried = rec && s?.all.some((d) => rec.items[d.id]?.tried);
     const allSoon = vis.length && vis.every((d) => !isOpen(d) && !d.status?.soldOut);
     const cls = `marker ${!vis.length ? "dim" : ""} ${state.sel === id ? "sel" : ""} ${tried ? "tried" : ""}`;
-    const tf = `translate(${p.x.toFixed(1)} ${p.y.toFixed(1)}) scale(${markerScale(isPav ? "pav" : "pin")})`;
+    const pos = `data-wx="${p.x.toFixed(1)}" data-wy="${p.y.toFixed(1)}" data-dx="${o.dx.toFixed(1)}" data-dy="${o.dy.toFixed(1)}"`;
     if (isPav) {
       const name = a.name.replace("The American Adventure", "America").replace("United Kingdom", "U.K.");
       const w = name.length * 5.6 + 14;
-      html += `<g class="${cls}" data-anchor="${id}" data-kind="pav" transform="${tf}">
+      html += `<div class="${cls}" data-anchor="${id}" data-kind="pav" ${pos} data-ox="40" data-oy="36" style="transform-origin:40px 36px">
+        <svg width="80" height="66" viewBox="-40 -36 80 66">
         <circle r="30" cy="-4" class="hit"/>
         <circle r="25" cy="-6" class="sel-ring"/>
         <g class="art">${LANDMARKS[id] || ""}</g>
@@ -570,35 +564,42 @@ function renderMarkers() {
         <text class="plate-t" y="18.3">${esc(name)}</text>
         ${vis.length ? `<rect class="tag ${allSoon ? "soon" : ""}" x="11" y="-30" width="17" height="15"/><text class="tag-t" x="19.5" y="-22.3">${vis.length}</text>` : ""}
         ${tried ? `<rect class="tried-tag" x="-26" y="-30" width="14" height="14"/><path d="M-23.5-23 -20.5-20l5-5.5" fill="none" stroke="#fff" stroke-width="2"/>` : ""}
-      </g>`;
+        </svg></div>`;
     } else {
       const first = vis[0] || s.all[0];
       const inner = first.country !== "park"
         ? `<svg class="pin-flag" x="-9" y="-25" width="18" height="12" viewBox="0 0 30 20" preserveAspectRatio="xMidYMid slice">${flagBody(first.country)}</svg>`
         : `<svg class="pin-flag" x="-7.5" y="-26.5" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="${iconPath(typeIcon(s.all))}"/></svg>`;
       const names = [...new Set(s.all.map((d) => d.booth))];
-      html += `<g class="${cls}" data-anchor="${id}" data-kind="pin" transform="${tf}">
+      html += `<div class="${cls}" data-anchor="${id}" data-kind="pin" ${pos} data-ox="40" data-oy="44" style="transform-origin:40px 44px">
+        <svg width="80" height="64" viewBox="-40 -44 80 64">
         <circle r="20" cy="-16" class="hit"/>
         <ellipse cx="0" cy="0" rx="5" ry="2" fill="#000" opacity=".3"/>
         <path class="pin-body" d="M0 0C-3-6-12-10-12-19A12 12 0 1 1 12-19C12-10 3-6 0 0Z"/>
         ${inner}
         ${vis.length ? `<rect class="tag ${allSoon ? "soon" : ""}" x="6" y="-38" width="15" height="13"/><text class="tag-t" x="13.5" y="-31.3">${vis.length}</text>` : ""}
-        ${u < 0.9 || state.sel === id ? `<text class="booth-t" y="12">${esc(names[0] + (names.length > 1 ? ` +${names.length - 1}` : ""))}</text>` : ""}
-      </g>`;
+        ${pxPerM > 1.1 || state.sel === id ? `<text class="booth-t" y="12">${esc(names[0] + (names.length > 1 ? ` +${names.length - 1}` : ""))}</text>` : ""}
+        </svg></div>`;
     }
   }
-  g.innerHTML = html;
+  if (state.me_pos) html += `<div class="me" data-kind="me" data-wx="${state.me_pos.x.toFixed(1)}" data-wy="${state.me_pos.y.toFixed(1)}" data-ox="12" data-oy="12"><span class="me-pulse"></span><span class="me-dot"></span></div>`;
+  ov.innerHTML = html;
+  overlayItems.length = 0;
+  for (const el of ov.children) {
+    const d = el.dataset;
+    overlayItems.push({ el, x: +d.wx, y: +d.wy, dx: +d.dx || 0, dy: +d.dy || 0, ox: +d.ox || 0, oy: +d.oy || 0, kind: d.kind || "label" });
+  }
+  placeOverlay();
   hideCrowdedLabels();
-  renderMe();
 }
+const renderMe = () => renderMarkers();
 
 // Land and building names give way to drink markers when they'd overlap.
 function hideCrowdedLabels() {
-  const boxes = [...document.querySelectorAll("#markers .marker")].map((m) => m.getBoundingClientRect());
+  const boxes = [...document.querySelectorAll("#overlay .marker .hit")].map((m) => m.getBoundingClientRect());
   const hit = (a, b) => a.left < b.right - 4 && a.right > b.left + 4 && a.top < b.bottom - 4 && a.bottom > b.top + 4;
-  document.querySelectorAll("#labels text:not(.water-label)").forEach((t) => {
-    const r = t.getBoundingClientRect();
-    t.style.display = boxes.some((b) => hit(r, b)) ? "none" : "";
+  document.querySelectorAll("#overlay .mlabel:not(.water) span").forEach((t) => {
+    t.style.visibility = boxes.some((b) => hit(t.getBoundingClientRect(), b)) ? "hidden" : "";
   });
 }
 
@@ -610,7 +611,7 @@ function typeIcon(ds) {
 }
 const iconPath = (name) => (icon(name).match(/ d="([^"]+)"/) || [])[1] || "";
 
-// Push overlapping markers apart (in world units) so neighbours like Norway & China stay tappable.
+// Push overlapping markers apart so neighbours like Norway & China stay tappable.
 function spread(items) {
   const pos = items.map((i) => ({ ...i }));
   for (let it = 0; it < 40; it++) {
@@ -630,171 +631,236 @@ function spread(items) {
   return Object.fromEntries(pos.map((p) => [p.id, { x: p.x, y: p.y }]));
 }
 
-function renderMe() {
-  const g = $("#meLayer");
-  if (!g) return;
-  g.innerHTML = "";
-  if (!state.me_pos) return;
-  const u = vb.w / $("#map").clientWidth;
-  const m = el("g", { transform: `translate(${state.me_pos.x} ${state.me_pos.y}) scale(${u})` }, g);
-  el("circle", { r: 12, class: "me-pulse" }, m);
-  el("circle", { r: 7, class: "me-dot" }, m);
-}
-
 // Scale bar in feet, plus rough walking time (≈80 m per minute).
 function updateScale() {
   const bar = $("#scaleBar");
-  if (!bar || !vb) return;
-  const pxPerM = $("#map").clientWidth / vb.w;
+  if (!bar || !view) return;
+  const pxPerM = stageSize.W / view.w;
   const ft = [50, 100, 200, 300, 500, 1000, 2000].find((f) => f * 0.3048 * pxPerM >= 56) || 2000;
   const m = ft * 0.3048;
   bar.style.width = `${Math.round(m * pxPerM)}px`;
   const mins = Math.round(m / 80);
-  $("#scaleT").textContent = `${ft.toLocaleString()} FT${mins >= 1 ? ` · ${mins} MIN WALK` : ""}`;
+  const txt = `${ft.toLocaleString()} FT${mins >= 1 ? ` · ${mins} MIN WALK` : ""}`;
+  if ($("#scaleT").textContent !== txt) $("#scaleT").textContent = txt;
 }
 
-function setVB(next) {
-  const svg = $("#map");
-  const W = svg.clientWidth || 390, H = svg.clientHeight || 700;
-  const b = geo.bounds;
-  const maxW = (b.x1 - b.x0) * 2.2, minW = 110;
-  next.w = Math.max(minW, Math.min(maxW, next.w));
-  next.h = next.w * H / W;
-  // keep the park on screen
-  const cx = Math.max(b.x0, Math.min(b.x1, next.x + next.w / 2));
-  const cy = Math.max(b.y0 - 60, Math.min(b.y1 + 60, next.y + next.h / 2));
-  next.x = cx - next.w / 2; next.y = cy - next.h / 2;
-  vb = next;
-  svg.setAttribute("viewBox", `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+// ── Viewport ──────────────────────────────────────────────────────────────
+// Smooth pan/zoom: while you're moving, the heavy map is slid/scaled as one GPU layer and the
+// markers/labels (an HTML overlay) glide on top. The SVG itself is only re-drawn once the map
+// settles — the same trick real map apps use.
+const stageSize = { W: 390, H: 700 };
+const overlayItems = [];
+let anim = null, commitT = null;
+
+function measureStage() {
+  const r = $("#mapStage")?.getBoundingClientRect();
+  if (r?.width) { stageSize.W = r.width; stageSize.H = r.height; }
+}
+const clampW = (w) => { const b = geo.bounds; return Math.max(110, Math.min((b.x1 - b.x0) * 2.2, w)); };
+function clampView(v) {
+  const { W, H } = stageSize, b = geo.bounds;
+  const cx0 = v.x + v.w / 2, cy0 = v.y + (v.w * H / W) / 2;
+  const w = clampW(v.w), h = w * H / W;
+  const cx = Math.max(b.x0, Math.min(b.x1, cx0)), cy = Math.max(b.y0 - 60, Math.min(b.y1 + 60, cy0));
+  return { x: cx - w / 2, y: cy - h / 2, w, h };
+}
+// Zoom by f keeping the world point under screen point (sx, sy) fixed.
+function zoomAbout(v, sx, sy, f) {
+  const { W, H } = stageSize, h = v.w * H / W;
+  const wx = v.x + sx / W * v.w, wy = v.y + sy / H * h;
+  const nw = clampW(v.w / f), nh = nw * H / W;
+  return clampView({ x: wx - sx / W * nw, y: wy - sy / H * nh, w: nw });
+}
+
+let drawQueued = false;
+function requestDraw() { if (!drawQueued) { drawQueued = true; requestAnimationFrame(draw); } }
+function draw() {
+  drawQueued = false;
+  if (!view || !vb) return;
+  const s = vb.w / view.w, k = stageSize.W / vb.w;
+  const tx = (vb.x - view.x) * k * s, ty = (vb.y - view.y) * k * s;
+  $("#map").style.transform = Math.abs(s - 1) < 1e-6 && Math.abs(tx) < 0.01 && Math.abs(ty) < 0.01 ? "" : `translate3d(${tx.toFixed(2)}px,${ty.toFixed(2)}px,0) scale(${s.toFixed(5)})`;
+  placeOverlay();
   updateScale();
 }
-function fitMap() {
+function placeOverlay() {
+  const pxPerM = stageSize.W / view.w, gp = growPav(), gn = growPin();
+  for (const it of overlayItems) {
+    const g = it.kind === "pav" ? gp : it.kind === "pin" ? gn : 1;
+    const sx = (it.x - view.x) * pxPerM + it.dx * g - it.ox, sy = (it.y - view.y) * pxPerM + it.dy * g - it.oy;
+    it.el.style.transform = `translate3d(${sx.toFixed(1)}px,${sy.toFixed(1)}px,0)${g !== 1 ? ` scale(${g.toFixed(3)})` : ""}`;
+  }
+}
+// Re-draw the SVG crisply at the settled position.
+function commit() {
+  clearTimeout(commitT);
+  if (!view) return;
+  vb = { ...view };
   const svg = $("#map");
-  const W = svg.clientWidth || 390, H = svg.clientHeight || 700;
-  const b = geo.bounds;
+  svg.setAttribute("viewBox", `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+  svg.style.transform = "";
+  renderMarkers();
+}
+const commitSoon = (ms = 160) => { clearTimeout(commitT); commitT = setTimeout(commit, ms); };
+function stopAnim() { if (anim) { cancelAnimationFrame(anim); anim = null; } }
+
+function flyTo(target, ms = 340) {
+  stopAnim(); clearTimeout(commitT);
+  const from = { ...view }, to = clampView(target), { W, H } = stageSize;
+  const fc = { x: from.x + from.w / 2, y: from.y + from.h / 2 }, tc = { x: to.x + to.w / 2, y: to.y + to.h / 2 };
+  const t0 = performance.now();
+  const step = (now) => {
+    const t = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - t, 3);
+    const w = from.w * Math.pow(to.w / from.w, e), h = w * H / W;
+    view = { x: fc.x + (tc.x - fc.x) * e - w / 2, y: fc.y + (tc.y - fc.y) * e - h / 2, w, h };
+    draw();
+    if (t < 1) anim = requestAnimationFrame(step); else { anim = null; commit(); }
+  };
+  anim = requestAnimationFrame(step);
+}
+// Momentum after a flick.
+function glide(vx, vy) {
+  stopAnim();
+  let last = performance.now();
+  const step = (now) => {
+    const dt = Math.min(34, now - last); last = now;
+    const f = Math.pow(0.9955, dt);
+    vx *= f; vy *= f;
+    const m = view.w / stageSize.W;
+    const next = clampView({ x: view.x - vx * dt * m, y: view.y - vy * dt * m, w: view.w });
+    if (Math.abs(next.x - (view.x - vx * dt * m)) > 0.01) vx = 0;   // hit the edge
+    if (Math.abs(next.y - (view.y - vy * dt * m)) > 0.01) vy = 0;
+    view = next;
+    draw();
+    if (Math.hypot(vx, vy) > 0.02) anim = requestAnimationFrame(step); else { anim = null; commit(); }
+  };
+  anim = requestAnimationFrame(step);
+}
+
+function computeFit() {
+  const { W, H } = stageSize, b = geo.bounds;
   const top = 118, bottom = 138; // header + filter bar, drawer peek
-  const left = 22, right = 56;           // clear of the zoom tools
+  const left = 22, right = 56;   // clear of the zoom tools
   const usableH = Math.max(200, H - top - bottom), usableW = Math.max(200, W - left - right);
   const k = Math.min(usableW / (b.x1 - b.x0), usableH / (b.y1 - b.y0)); // px per meter
-  const w = W / k, h = H / k;
-  const cxPx = left + usableW / 2, cyPx = top + usableH / 2; // where the park centre should land on screen
   const cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2;
-  vb = { x: cx - cxPx / k, y: cy - cyPx / k, w, h };
-  fitVB = { ...vb };
-  svg.setAttribute("viewBox", `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
-  updateScale();
+  return { x: cx - (left + usableW / 2) / k, y: cy - (top + usableH / 2) / k, w: W / k, h: H / k };
 }
-
-let rafPending = false;
-function scheduleMarkerUpdate() {
-  if (rafPending) return;
-  rafPending = true;
-  requestAnimationFrame(() => {
-    rafPending = false;
-    const u = vb.w / $("#map").clientWidth;
-    const k = { pav: markerScale("pav"), pin: markerScale("pin") };
-    document.querySelectorAll("#markers .marker").forEach((m) => {
-      const p = geo.disp?.[m.dataset.anchor] || geo.pts[m.dataset.anchor];
-      m.setAttribute("transform", `translate(${p.x} ${p.y}) scale(${k[m.dataset.kind]})`);
-    });
-    document.querySelectorAll("#labels text").forEach((t) => {
-      const tr = t.getAttribute("transform").replace(/scale\([^)]*\)/, `scale(${u})`);
-      t.setAttribute("transform", tr);
-    });
-    renderMe();
-  });
+function fitMap() {
+  measureStage();
+  stopAnim();
+  fitVB = computeFit();
+  view = { ...fitVB };
+  vb = { ...fitVB };
+  const svg = $("#map");
+  svg.setAttribute("viewBox", `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+  svg.style.transform = "";
+  updateScale();
 }
 
 let pzReady = false;
-let zoomAtFn = null;
 function initPanZoom() {
   if (pzReady) return;
   pzReady = true;
-  const svg = $("#map");
+  const stage = $("#mapStage");
   const pts = new Map();
-  let start = null, moved = 0, pinch = null;
-
-  const toWorld = (cx, cy) => {
-    const r = svg.getBoundingClientRect();
-    return { x: vb.x + (cx - r.left) / r.width * vb.w, y: vb.y + (cy - r.top) / r.height * vb.h };
-  };
-  const zoomAt = zoomAtFn = (cx, cy, f) => {
-    const w = toWorld(cx, cy);
-    const nw = vb.w / f;
-    const r = svg.getBoundingClientRect();
-    const fx = (cx - r.left) / r.width, fy = (cy - r.top) / r.height;
-    const nh = nw * r.height / r.width;
-    setVB({ x: w.x - fx * nw, y: w.y - fy * nh, w: nw, h: nh });
-    scheduleMarkerUpdate();
+  let g = null, lastTap = { t: 0, x: 0, y: 0 };
+  const local = (e) => { const r = stage.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+  // (Re)start the gesture from the current fingers, so adding/lifting a finger never jumps.
+  const rebase = () => {
+    const ps = [...pts.values()];
+    g.view0 = { ...view };
+    if (ps.length >= 2) {
+      g.mid0 = { x: (ps[0].x + ps[1].x) / 2, y: (ps[0].y + ps[1].y) / 2 };
+      g.d0 = Math.max(10, Math.hypot(ps[0].x - ps[1].x, ps[0].y - ps[1].y));
+    } else g.p0 = { ...ps[0] };
+    g.samples = [];
   };
 
-  svg.addEventListener("pointerdown", (e) => {
-    svg.setPointerCapture(e.pointerId);
-    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (pts.size === 1) { start = { x: e.clientX, y: e.clientY, vb: { ...vb } }; moved = 0; }
-    if (pts.size === 2) {
-      const [a, b] = [...pts.values()];
-      pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), w: vb.w };
-    }
+  stage.addEventListener("pointerdown", (e) => {
+    if (e.button > 0) return;
+    stopAnim(); clearTimeout(commitT);
+    stage.setPointerCapture(e.pointerId);
+    pts.set(e.pointerId, local(e));
+    if (pts.size === 1) g = { moved: 0, pinched: false, start: local(e), marker: e.target.closest?.(".marker")?.dataset.anchor || null };
+    if (pts.size === 2) g.pinched = true;
+    rebase();
   });
-  svg.addEventListener("pointermove", (e) => {
+  stage.addEventListener("pointermove", (e) => {
+    if (!pts.has(e.pointerId) || !g) return;
+    pts.set(e.pointerId, local(e));
+    const ps = [...pts.values()];
+    const { W, H } = stageSize;
+    if (ps.length >= 2) {
+      const mid = { x: (ps[0].x + ps[1].x) / 2, y: (ps[0].y + ps[1].y) / 2 };
+      const d = Math.max(10, Math.hypot(ps[0].x - ps[1].x, ps[0].y - ps[1].y));
+      const v0 = g.view0, h0 = v0.w * H / W;
+      const wx = v0.x + g.mid0.x / W * v0.w, wy = v0.y + g.mid0.y / H * h0;   // world point that started under the fingers
+      const nw = clampW(v0.w * g.d0 / d), nh = nw * H / W;
+      view = clampView({ x: wx - mid.x / W * nw, y: wy - mid.y / H * nh, w: nw });
+      g.moved = 99;
+    } else {
+      const p = ps[0];
+      g.moved = Math.max(g.moved, Math.hypot(p.x - g.start.x, p.y - g.start.y));
+      if (g.moved < 4 && !g.pinched) return;   // don't twitch on a tap
+      const m = g.view0.w / W;
+      view = clampView({ x: g.view0.x - (p.x - g.p0.x) * m, y: g.view0.y - (p.y - g.p0.y) * m, w: g.view0.w });
+      g.samples.push({ x: p.x, y: p.y, t: e.timeStamp });
+      if (g.samples.length > 6) g.samples.shift();
+    }
+    requestDraw();
+  });
+  const up = (e) => {
     if (!pts.has(e.pointerId)) return;
-    const prev = pts.get(e.pointerId);
-    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (pts.size === 1 && start) {
-      moved = Math.max(moved, Math.hypot(e.clientX - start.x, e.clientY - start.y));
-      const r = svg.getBoundingClientRect();
-      const dx = (e.clientX - prev.x) / r.width * vb.w, dy = (e.clientY - prev.y) / r.height * vb.h;
-      setVB({ ...vb, x: vb.x - dx, y: vb.y - dy });
-      scheduleMarkerUpdate();
-    } else if (pts.size === 2 && pinch) {
-      moved = 99;
-      const [a, b] = [...pts.values()];
-      const d = Math.hypot(a.x - b.x, a.y - b.y);
-      const targetW = pinch.w * pinch.d / d;
-      zoomAt((a.x + b.x) / 2, (a.y + b.y) / 2, vb.w / targetW);
-    }
-  });
-  const end = (e) => {
-    const wasTap = pts.size === 1 && moved < 8;
     pts.delete(e.pointerId);
-    if (pts.size < 2) pinch = null;
-    if (!pts.size) {
-      if (wasTap) {
-        const hit = document.elementsFromPoint(e.clientX, e.clientY).find((n) => n.closest?.(".marker"));
-        const m = hit?.closest(".marker");
-        if (m) selectSpot(m.dataset.anchor);
-        else if (state.filtersOpen) setFiltersOpen(false);
-        else if (state.drawer !== "peek") { state.sel = null; state.drawer = "peek"; render(); }
-      }
-      renderMarkers();
-      start = null;
+    if (pts.size) { rebase(); return; }
+    const gest = g; g = null;
+    if (!gest) return;
+    const p = local(e);
+    if (gest.moved < 8 && !gest.pinched) {
+      const dbl = e.timeStamp - lastTap.t < 300 && Math.hypot(p.x - lastTap.x, p.y - lastTap.y) < 30;
+      lastTap = { t: dbl ? 0 : e.timeStamp, x: p.x, y: p.y };
+      if (gest.marker) return selectSpot(gest.marker);
+      if (dbl) return flyTo(zoomAbout(view, p.x, p.y, 2));
+      if (state.filtersOpen) setFiltersOpen(false);
+      else if (state.drawer !== "peek") { state.sel = null; state.drawer = "peek"; render(); }
+      return;
     }
+    const s = gest.samples || [];
+    const a = s[0], b = s[s.length - 1];
+    if (!gest.pinched && a && b && b.t - a.t > 8 && e.timeStamp - b.t < 60) {
+      const vx = (b.x - a.x) / (b.t - a.t), vy = (b.y - a.y) / (b.t - a.t);
+      if (Math.hypot(vx, vy) > 0.25) return glide(Math.max(-4, Math.min(4, vx)), Math.max(-4, Math.min(4, vy)));
+    }
+    commit();
   };
-  svg.addEventListener("pointerup", end);
-  svg.addEventListener("pointercancel", end);
-  svg.addEventListener("wheel", (e) => { e.preventDefault(); zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.15 : 1 / 1.15); clearTimeout(initPanZoom.t); initPanZoom.t = setTimeout(renderMarkers, 150); }, { passive: false });
-  let lastTap = 0;
-  svg.addEventListener("pointerup", (e) => {
-    const now = Date.now();
-    if (now - lastTap < 280 && moved < 8) { zoomAt(e.clientX, e.clientY, 1.8); setTimeout(renderMarkers, 50); }
-    lastTap = now;
-  });
+  stage.addEventListener("pointerup", up);
+  stage.addEventListener("pointercancel", up);
+  // Mouse wheel zooms; trackpad pinch zooms; two-finger trackpad scroll pans.
+  stage.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    stopAnim();
+    const p = local(e);
+    const px = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? stageSize.H : 1;
+    const mouseWheel = e.deltaMode !== 0 || (e.deltaX === 0 && Math.abs(e.deltaY) >= 50 && Number.isInteger(e.deltaY));
+    if (e.ctrlKey || mouseWheel) view = zoomAbout(view, p.x, p.y, Math.exp(-e.deltaY * px * (e.ctrlKey ? 0.01 : 0.002)));
+    else { const m = view.w / stageSize.W; view = clampView({ x: view.x + e.deltaX * px * m, y: view.y + e.deltaY * px * m, w: view.w }); }
+    requestDraw();
+    commitSoon();
+  }, { passive: false });
   window.addEventListener("resize", () => { if (state.tab === "map" && geo) { fitMap(); renderMarkers(); } });
 }
+
+function zoomBy(f) { if (view) flyTo(zoomAbout(view, stageSize.W / 2, stageSize.H * 0.42, f), 280); }
 
 function selectSpot(id) {
   state.sel = id;
   state.drawer = "half";
   render();
-  // nudge map so the spot sits above the drawer
-  const p = geo.pts[id];
-  const svg = $("#map");
-  const H = svg.clientHeight;
-  const targetY = H * 0.24;
-  const k = svg.clientWidth / vb.w;
-  setVB({ ...vb, x: p.x - vb.w / 2, y: p.y - targetY / k });
-  scheduleMarkerUpdate();
+  // glide the spot into view above the drawer, zooming in a little if we're zoomed out
+  const p = geo.pts[id], { W, H } = stageSize;
+  const w = Math.min(view.w, fitVB.w / 1.5), h = w * H / W;
+  flyTo({ x: p.x - w / 2, y: p.y - 0.26 * h, w }, 420);
 }
 
 // ── Filters (collapsible; shared by the map and the menu list) ────────────
@@ -898,7 +964,7 @@ function toggleLocate() {
       state.me_pos = null;
     } else {
       state.me_pos = { ...p, lat, lng };
-      if (first) { setVB({ ...vb, x: p.x - vb.w / 2, y: p.y - vb.h * 0.35 }); }
+      if (first) flyTo({ x: p.x - view.w / 2, y: p.y - view.h * 0.35, w: view.w });
     }
     first = false;
     $("#locBtn").classList.add("on");
@@ -1374,10 +1440,9 @@ $("#festBtn").onclick = () => D() && infoSheet();
 $("#settingsBtn").onclick = () => D() && infoSheet();
 $("#addBtn").onclick = addSheet;
 $("#locBtn").onclick = toggleLocate;
-$("#fitBtn").onclick = () => { if (fitVB) { vb = { ...fitVB }; fitMap(); renderMarkers(); } };
-const zoomBtn = (f) => { if (!zoomAtFn) return; const r = $("#map").getBoundingClientRect(); zoomAtFn(r.left + r.width / 2, r.top + r.height * 0.42, f); clearTimeout(zoomBtn.t); zoomBtn.t = setTimeout(renderMarkers, 120); };
-$("#zoomIn").onclick = () => zoomBtn(1.5);
-$("#zoomOut").onclick = () => zoomBtn(1 / 1.5);
+$("#fitBtn").onclick = () => { if (fitVB && view) flyTo(fitVB, 420); };
+$("#zoomIn").onclick = () => zoomBy(1.6);
+$("#zoomOut").onclick = () => zoomBy(1 / 1.6);
 document.querySelectorAll("[data-icon]").forEach((b) => b.insertAdjacentHTML("afterbegin", icon(b.dataset.icon)));
 state.filtersOpen = ls.get(LS.fopen, false);
 

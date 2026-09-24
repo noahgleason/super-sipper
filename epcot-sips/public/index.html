@@ -31,7 +31,10 @@
 
   <!-- MAP -->
   <section id="mapView" class="map-view" aria-label="EPCOT map">
-    <svg id="map" role="img" aria-label="Map of EPCOT with drink locations"></svg>
+    <div id="mapStage" class="map-stage">
+      <svg id="map" role="img" aria-label="Map of EPCOT with drink locations"></svg>
+      <div id="overlay" class="map-overlay"></div>
+    </div>
     <div class="map-ui" id="mapFilters"></div>
     <div class="map-tools">
       <button class="tool" id="zoomIn" aria-label="Zoom in" data-icon="plus"></button>
