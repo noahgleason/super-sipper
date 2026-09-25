@@ -88,22 +88,22 @@ const fmtDate = (iso) => iso ? new Date(iso + "T12:00:00").toLocaleDateString("e
 const shortFest = (name) => String(name || "").replace(/^EPCOT\s+International\s+/i, "").replace(/^EPCOT\s+/i, "");
 // Prices like "$6.00 / $9.75" list one amount per size.
 const priceList = (p) => [...String(p || "").matchAll(/\$\s?(\d+(?:\.\d{1,2})?)/g)].map((m) => parseFloat(m[1]));
-const qtyOf = (it) => (it?.tried ? Math.max(1, it.qty || 1) : 0);
-const unitPrice = (price, it) => { const ps = priceList(price); return ps.length ? ps[Math.min(it?.size || 0, ps.length - 1)] : null; };
-const costOf = (price, it) => { const u = unitPrice(price, it); return u == null || !it?.tried ? null : u * qtyOf(it); };
 const money = (n) => `$${n.toFixed(2)}`;
-// entries: [{ price, it }] → drinks (with quantities), dollars, and how many had no price
-function totals(entries) {
-  let drinks = 0, dollars = 0, unpriced = 0;
-  for (const { price, it } of entries) {
-    if (!it?.tried) continue;
-    drinks += qtyOf(it);
-    const c = costOf(price, it);
-    if (c == null) unpriced += qtyOf(it); else dollars += c;
+const lineCost = (price, counts) => { const ps = priceList(price); return ps.length ? counts.reduce((sum, n, i) => sum + n * ps[Math.min(i, ps.length - 1)], 0) : null; };
+// What the family bought this visit. "Tried it" isn't a purchase (people share), so every drink
+// anyone tried gets one line; its count is 1 (assumed) until someone sets the real number.
+function tabLines() {
+  const byId = {};
+  for (const m of members()) for (const x of memberItems(m)) if (x.it.tried) {
+    (byId[x.id] ||= { id: x.id, name: x.name, booth: x.booth, country: x.country, price: x.price, who: [] }).who.push(m);
   }
-  return { drinks, dollars, unpriced };
+  return Object.values(byId).map((l) => {
+    const e = D().tab?.[l.id], n = Math.max(1, priceList(l.price).length);
+    const counts = e ? Array.from({ length: n }, (_, i) => e.counts[i] || 0) : [1, ...Array(n - 1).fill(0)];
+    return { ...l, counts, assumed: !e, qty: counts.reduce((a, b) => a + b, 0), cost: lineCost(l.price, counts) };
+  }).sort((a, b) => a.name.localeCompare(b.name));
 }
-const pastEntry = (t) => ({ price: t.price, it: { tried: true, qty: t.qty || 1, size: t.size || 0 } });
+const tabTotals = (lines) => lines.reduce((t, l) => ({ drinks: t.drinks + l.qty, dollars: t.dollars + (l.cost || 0), unpriced: t.unpriced + (l.cost == null ? l.qty : 0), assumed: t.assumed + (l.assumed ? 1 : 0) }), { drinks: 0, dollars: 0, unpriced: 0, assumed: 0 });
 const priceNum = (p) => { const m = String(p || "").match(/\$?(\d+(?:\.\d+)?)/); return m ? parseFloat(m[1]) : Infinity; };
 const members = () => D()?.members || [];
 const myRec = () => members().find((m) => state.me && m.name.toLowerCase() === state.me.name.toLowerCase());
@@ -1030,19 +1030,7 @@ function drinkCard(d, { showWhere = false } = {}) {
       <button class="btn icon push ${mine.want ? "on-want" : ""}" data-act="want" aria-label="Want to try">${icon("heart")}</button>
       <button class="btn icon ghost" data-act="more" aria-label="More">${icon("more")}</button>
     </div>
-    ${mine.tried ? qtyRow(d.price, mine) : ""}
   </article>`;
-}
-
-function qtyRow(price, it) {
-  const ps = priceList(price), q = qtyOf(it), size = Math.min(it.size || 0, Math.max(0, ps.length - 1));
-  const unit = unitPrice(price, it), cost = costOf(price, it);
-  return `<div class="qty-row">
-    <span class="qty-label">Had</span>
-    <span class="stepper"><button data-qty="-1" aria-label="One fewer" ${q <= 1 ? "disabled" : ""}>${icon("minus")}</button><b>${q}</b><button data-qty="1" aria-label="One more">${icon("plus")}</button></span>
-    ${ps.length > 1 ? `<span class="sizes" role="group" aria-label="Size">${ps.map((p, i) => `<button data-size="${i}" class="${i === size ? "on" : ""}">${money(p)}</button>`).join("")}</span>` : ""}
-    <span class="subtotal">${cost != null ? `${q > 1 ? `${q} × ${money(unit)} = ` : ""}<b>${money(cost)}</b>` : `<span class="muted">no price</span>`}</span>
-  </div>`;
 }
 
 function renderList() {
@@ -1094,11 +1082,10 @@ function renderList() {
 function renderFamily() {
   const ms = members().map((m) => {
     const items = memberItems(m);
-    const past = pastTriedFor(m.name);
-    const now = totals(items), ever = totals([...items, ...past.map(pastEntry)]);
-    return { m, now, ever, stamps: stampsFor(m).size };
-  }).sort((a, b) => b.now.drinks - a.now.drinks || b.now.dollars - a.now.dollars);
-  const fam = ms.reduce((t, x) => ({ drinks: t.drinks + x.now.drinks, dollars: t.dollars + x.now.dollars, unpriced: t.unpriced + x.now.unpriced }), { drinks: 0, dollars: 0, unpriced: 0 });
+    const now = items.filter((x) => x.it.tried).length;
+    return { m, now, ever: now + pastTriedFor(m.name).length, stamps: stampsFor(m).size };
+  }).sort((a, b) => b.now - a.now || b.ever - a.ever);
+  const fam = tabTotals(tabLines());
   if (!ms.length && !visits().length) return `<div class="empty"><div class="e">${icon("family")}</div><p>No one has checked in yet.<br/>Text this site's link to the family — everyone picks their name on their own phone.</p></div>`;
 
   const rated = D().drinks.map((d) => {
@@ -1115,14 +1102,14 @@ function renderFamily() {
     <h2 class="section-title">Family</h2>
     <p class="section-sub">${esc(festLabel())} · updates live from everyone's phones</p>
     <div class="stat-tiles">
-      <div class="stat"><b>${fam.drinks}</b><span>drinks this visit</span></div>
-      <div class="stat"><b>${money(fam.dollars)}</b><span>family total${fam.unpriced ? ` · ${fam.unpriced} unpriced` : ""}</span></div>
+      <div class="stat"><b>${fam.drinks}</b><span>drinks bought</span></div>
+      <div class="stat"><b>${money(fam.dollars)}</b><span>family total${fam.assumed ? ` · ${fam.assumed} to confirm` : ""}</span></div>
     </div>
     ${familyTab()}
     <div class="card"><h3>${icon("trophy")}Leaderboard</h3><div class="rows">${ms.map((x, i) => `
       <div class="leader"><span class="rank">${i + 1}</span>${avatar(x.m.emoji)}
-        <div class="who"><b>${esc(x.m.name)}</b><small>${money(x.now.dollars)} this visit · ${x.stamps} countr${x.stamps === 1 ? "y" : "ies"} · ${x.ever.drinks} all-time</small></div>
-        <div class="score">${x.now.drinks}<small>drinks</small></div></div>`).join("")}</div></div>
+        <div class="who"><b>${esc(x.m.name)}</b><small>${x.stamps} countr${x.stamps === 1 ? "y" : "ies"} stamped · ${x.ever} all-time</small></div>
+        <div class="score">${x.now}<small>tried</small></div></div>`).join("")}</div></div>
     ${rated.length ? `<div class="card"><h3>${icon("star")}Top 3 family favorites</h3><div class="rows">${rated.map((x, i) => `
       <div class="leader"><span class="rank medal m${i + 1}">${i + 1}</span>${flag(x.d.country)}
         <div class="who"><b>${esc(x.d.name)}</b><small>${esc(x.d.booth)} · ${x.n} rating${x.n > 1 ? "s" : ""}</small></div>
@@ -1140,61 +1127,50 @@ function renderFamily() {
     ${visits().length ? `<p class="group-label">${icon("clock")}Past visits</p>${visits().map(visitCard).join("")}` : ""}`;
 }
 
-// Shared bar tab: everyone's drinks this visit, with quantity/size anyone in the family can fix.
+// Shared family tab: what we actually bought. Anyone can set the counts.
 function familyTab() {
-  const people = members().map((m) => {
-    const lines = memberItems(m).filter((x) => x.it.tried).sort((a, b) => a.name.localeCompare(b.name));
-    return { m, lines, t: totals(lines) };
-  }).filter((p) => p.lines.length).sort((a, b) => a.m.name.localeCompare(b.m.name));
-  if (!people.length) return "";
-  const all = people.reduce((s, p) => ({ drinks: s.drinks + p.t.drinks, dollars: s.dollars + p.t.dollars, unpriced: s.unpriced + p.t.unpriced }), { drinks: 0, dollars: 0, unpriced: 0 });
+  const lines = tabLines();
+  if (!lines.length) return "";
+  const t = tabTotals(lines);
   return `<details class="card tab-card" ${ls.get("sips.tabOpen", true) ? "open" : ""}>
-    <summary><h3>${icon("ticket")}Family tab<span class="tab-total">${money(all.dollars)}</span>${icon("chevron", "chev")}</h3></summary>
-    <p class="tab-note">Anyone can fix a quantity or size here — totals update for everyone.${all.unpriced ? ` ${all.unpriced} drink${all.unpriced > 1 ? "s have" : " has"} no listed price.` : ""}</p>
-    ${people.map(({ m, lines, t }) => `
-      <div class="tab-person">
-        <div class="tab-head">${avatar(m.emoji)}<b>${esc(m.name)}</b><span>${t.drinks} drink${t.drinks === 1 ? "" : "s"} · <b>${money(t.dollars)}</b></span></div>
-        ${lines.map((x) => {
-          const ps = priceList(x.price), q = qtyOf(x.it), size = Math.min(x.it.size || 0, Math.max(0, ps.length - 1)), c = costOf(x.price, x.it);
-          return `<div class="tab-line" data-member="${esc(m.name)}" data-drink="${esc(x.id)}">
-            <div class="tl-name"><b>${esc(x.name)}</b><small>${flag(x.country)}${esc(x.booth)}</small></div>
-            <div class="tl-ctl">
-              <span class="stepper"><button data-tab-qty="-1" aria-label="One fewer" ${q <= 1 ? "disabled" : ""}>${icon("minus")}</button><b>${q}</b><button data-tab-qty="1" aria-label="One more">${icon("plus")}</button></span>
-              ${ps.length > 1 ? `<span class="sizes">${ps.map((p, i) => `<button data-tab-size="${i}" class="${i === size ? "on" : ""}">${money(p)}</button>`).join("")}</span>` : ""}
-              <span class="tl-cost">${c != null ? money(c) : `<span class="muted">no price</span>`}</span>
-            </div></div>`;
-        }).join("")}
-      </div>`).join("")}
-    <div class="tab-grand"><span>${all.drinks} drinks</span><b>${money(all.dollars)}</b></div>
+    <summary><h3>${icon("ticket")}Family tab<span class="tab-total">${money(t.dollars)}</span>${icon("chevron", "chev")}</h3></summary>
+    <p class="tab-note">Tapping "Tried it" doesn't mean everyone bought one. Set how many the family actually bought — anyone can change it, and totals update for everyone.${t.assumed ? ` <b>${t.assumed} drink${t.assumed > 1 ? "s are" : " is"} still assumed at 1.</b>` : ""}</p>
+    <div class="tab-list">${lines.map((l) => {
+      const ps = priceList(l.price);
+      return `<div class="tab-line ${l.assumed ? "assumed" : ""}" data-drink="${esc(l.id)}">
+        <div class="tl-top">
+          <div class="tl-name"><b>${esc(l.name)}</b><small>${flag(l.country)}${esc(l.booth)}</small></div>
+          <span class="tl-cost">${l.cost != null ? money(l.cost) : `<span class="muted">no price</span>`}</span>
+        </div>
+        <div class="tl-who">${l.who.map((m) => avatar(m.emoji)).join("")}<span>${esc(l.who.map((m) => m.name).join(", "))} tried it</span></div>
+        <div class="tl-ctl">
+          <span class="qty-label">Bought</span>
+          ${l.counts.map((n, i) => `<span class="buy">${ps.length > 1 ? `<small>${money(ps[i])}</small>` : ""}<span class="stepper"><button data-buy="${i}" data-d="-1" aria-label="One fewer" ${n <= 0 ? "disabled" : ""}>${icon("minus")}</button><b>${n}</b><button data-buy="${i}" data-d="1" aria-label="One more">${icon("plus")}</button></span></span>`).join("")}
+          ${l.assumed ? `<button class="linkbtn tl-ok" data-buy-ok>${icon("check")}1 is right</button>` : ""}
+        </div></div>`;
+    }).join("")}</div>
+    <div class="tab-grand"><span>${t.drinks} bought${t.unpriced ? ` · ${t.unpriced} unpriced` : ""}</span><b>${money(t.dollars)}</b></div>
   </details>`;
 }
 
-// Edit anyone's check-in from the shared tab.
-async function editTab(name, drinkId, patch) {
-  if (state.me && sameName(name, state.me.name)) return checkin(drinkId, patch);
-  const rec = members().find((m) => sameName(m.name, name));
-  if (!rec) return;
-  rec.items[drinkId] = { ...(rec.items[drinkId] || {}), ...patch };
+async function setBought(drinkId, counts) {
+  (D().tab ||= {})[drinkId] = { drinkId, counts, by: state.me?.name, at: new Date().toISOString() };
   render();
-  try {
-    const out = await api("checkin", { method: "POST", body: { member: rec.name, drinkId, ...patch } });
-    Object.assign(rec, out.member);
-    render();
-  } catch (e) { toast(e.message); load({ quiet: true }); }
+  try { await api("tab", { method: "POST", body: { drinkId, counts, member: state.me?.name } }); }
+  catch (e) { toast(e.message); load({ quiet: true }); }
 }
 
 function visitCard(v) {
-  const people = [...v.members].filter((m) => m.tried.length).map((m) => ({ ...m, t: totals(m.tried.map(pastEntry)) })).sort((a, b) => b.t.drinks - a.t.drinks);
-  const all = people.reduce((s, m) => ({ drinks: s.drinks + m.t.drinks, dollars: s.dollars + m.t.dollars }), { drinks: 0, dollars: 0 });
+  const people = [...v.members].filter((m) => m.tried.length).sort((a, b) => b.tried.length - a.tried.length);
   return `<div class="card visit-card"><h3>${icon("ticket")}${esc(v.name)}</h3><div class="rows">
-    <p class="visit-meta">${fmtDay(v.startedAt)} – ${fmtDay(v.endedAt)} · ${all.drinks} drink${all.drinks === 1 ? "" : "s"} · <b>${money(all.dollars)}</b> total</p>
+    <p class="visit-meta">${fmtDay(v.startedAt)} – ${fmtDay(v.endedAt)}${v.spend ? ` · ${v.spend.drinks} bought · <b>${money(v.spend.dollars)}</b> total` : ""}</p>
     ${v.favorites?.length ? `<p class="visit-sub">Top 3 favorites</p>${v.favorites.map((f, i) => `
       <div class="leader"><span class="rank medal m${i + 1}">${i + 1}</span>${flag(f.country)}
         <div class="who"><b>${esc(f.name)}</b><small>${esc(f.booth)} · ${f.n} rating${f.n > 1 ? "s" : ""}</small></div>
         <div class="score">${Number(f.avg).toFixed(1)}<small>avg stars</small></div></div>`).join("")}` : ""}
     <p class="visit-sub">Who tried what</p>
     ${people.map((m) => `<div class="leader">${avatar(m.emoji)}<div class="who"><b>${esc(m.name)}</b><small>${esc(m.tried.slice(0, 3).map((t) => t.name).join(", "))}${m.tried.length > 3 ? ` +${m.tried.length - 3} more` : ""}</small></div>
-      <div class="score">${m.t.drinks}<small>${money(m.t.dollars)}</small></div></div>`).join("")}
+      <div class="score">${m.tried.length}<small>tried</small></div></div>`).join("")}
   </div></div>`;
 }
 
@@ -1227,13 +1203,13 @@ function renderPassport() {
   const past = pastTriedFor(state.me.name);
   const byVisit = {};
   for (const t of past) (byVisit[t.visit.id] ||= { v: t.visit, xs: [] }).xs.push(t);
-  const now = totals(items), ever = totals([...items, ...past.map(pastEntry)]);
+
 
   return `
     <div class="passport">
       <span class="seal">${icon("globe")}</span>
       <div class="passport-head">${avatar(state.me.emoji)}<div><div class="eyebrow">World Showcase Passport</div><h2>${esc(state.me.name)}</h2></div></div>
-      <div class="meta"><span><b>${now.drinks}</b>drinks this visit</span><span><b>${money(now.dollars)}</b>spent this visit</span>${past.length ? `<span><b>${ever.drinks} · ${money(ever.dollars)}</b>all-time</span>` : ""}<span><b>${got.size}/${cs.length}</b>stamps</span></div>
+      <div class="meta"><span><b>${tried.length}</b>tried this visit</span>${past.length ? `<span><b>${tried.length + past.length}</b>all-time</span>` : ""}<span><b>${got.size}/${cs.length}</b>stamps</span></div>
       <div class="stamps">${cs.map((c, i) => stampSVG(c, got.has(c.id), i)).join("")}</div>
     </div>
     ${want.length ? `<p class="group-label">${icon("heart")}Want to try (${want.length})</p><div class="drinks">${want.map((x) => drinkCard(x.d, { showWhere: true })).join("")}</div>` : ""}
@@ -1249,7 +1225,7 @@ function renderPassport() {
       <p class="group-label">${icon("ticket")}${esc(v.name)} (${xs.length})</p>
       <div class="drinks">${xs.sort((a, b) => (b.rating || 0) - (a.rating || 0)).map((t) => `
         <article class="drink tried past"><div class="drink-top"><span class="drink-type">${icon(TYPE_ICON[t.type] || "glass")}</span><div class="drink-title"><h4>${esc(t.name)}</h4></div><span class="price">${esc(t.price)}</span></div>
-          <p class="where">${flag(t.country)}${esc(t.booth)} · ${fmtDay(t.at || v.endedAt)}${(() => { const e = pastEntry(t), c = costOf(e.price, e.it); return c != null ? ` · ${e.it.qty > 1 ? `${e.it.qty} × ` : ""}${money(c)}` : e.it.qty > 1 ? ` · ×${e.it.qty}` : ""; })()}</p>
+          <p class="where">${flag(t.country)}${esc(t.booth)} · ${fmtDay(t.at || v.endedAt)}</p>
           ${t.rating ? `<div class="chips"><span class="chip star">${icon("star")}${t.rating}</span></div>` : ""}
           ${t.note ? `<p class="my-note">“${esc(t.note)}”</p>` : ""}</article>`).join("")}</div>`).join("")}`;
 }
@@ -1551,10 +1527,10 @@ document.addEventListener("click", (ev) => {
 
   const line = t.closest(".tab-line");
   if (line) {
-    const { member, drink } = line.dataset;
-    const it = members().find((m) => sameName(m.name, member))?.items?.[drink] || {};
-    if (t.dataset.tabQty) return editTab(member, drink, { qty: Math.max(1, Math.min(20, qtyOf(it) + Number(t.dataset.tabQty))) });
-    if (t.dataset.tabSize) return editTab(member, drink, { size: Number(t.dataset.tabSize) });
+    const l = tabLines().find((x) => x.id === line.dataset.drink);
+    if (!l) return;
+    if (t.hasAttribute("data-buy-ok")) return setBought(l.id, l.counts);
+    if (t.dataset.buy) { const c = [...l.counts]; c[+t.dataset.buy] = Math.max(0, Math.min(50, c[+t.dataset.buy] + Number(t.dataset.d))); return setBought(l.id, c); }
   }
   const card = t.closest(".drink[data-id]");
   if (card) {
@@ -1564,8 +1540,6 @@ document.addEventListener("click", (ev) => {
     if (t.dataset.rate) { const n = Number(t.dataset.rate); return checkin(id, { rating: mine.rating === n ? 0 : n }); }
     if (t.dataset.act === "tried") return checkin(id, { tried: !mine.tried, ...(mine.tried ? { rating: 0 } : {}) });
     if (t.dataset.act === "want") return checkin(id, { want: !mine.want });
-    if (t.dataset.qty) return checkin(id, { qty: Math.max(1, Math.min(20, qtyOf(mine) + Number(t.dataset.qty))) });
-    if (t.dataset.size) return checkin(id, { size: Number(t.dataset.size) });
     if (t.dataset.act === "more") return state.me ? moreSheet(d) : joinSheet();
   }
 });

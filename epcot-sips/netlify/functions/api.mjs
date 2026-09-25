@@ -10,6 +10,7 @@
 //   POST   /api/verify           check the family code
 //   POST   /api/unlock           check the refresh password → the claude.ai prompt for manual updates
 //   POST   /api/import           preview (dryRun) or save a menu pasted back from claude.ai
+//   POST   /api/tab              set how many of a drink the family bought (per size) this visit
 //   POST   /api/visit/new        archive this visit (tried drinks, ratings, top-3 favorites), then start fresh
 //
 // Optional env vars: FAMILY_CODE (passcode for changes), EPCOT_SIPS_CLAUDE_KEY (your own Anthropic key;
@@ -48,10 +49,10 @@ async function listJSON(s, prefix) {
 async function getState(req) {
   const s = store();
   const today = todayET();
-  const [menus, custom, statuses, members, firstSeen, refresh, visit, visits] = await Promise.all([
+  const [menus, custom, statuses, members, firstSeen, refresh, visit, visits, tab] = await Promise.all([
     readMenus(s), listJSON(s, "custom/"), listJSON(s, "status/"), listJSON(s, "member/"),
     s.get("menu/firstseen", { type: "json" }), readStatus(s),
-    s.get("config/visit", { type: "json" }), listJSON(s, "visits/"),
+    s.get("config/visit", { type: "json" }), listJSON(s, "visits/"), listJSON(s, "tab/"),
   ]);
   const { fest, yr } = menus;
   const fid = festivalId(fest.festival);
@@ -100,6 +101,7 @@ async function getState(req) {
     drinks,
     members,
     visit: visit || { startedAt: null },
+    tab: Object.fromEntries(tab.map((t) => [t.drinkId, t])),
     visits: visits.sort((a, b) => String(b.endedAt).localeCompare(String(a.endedAt))),
     requiresCode: !!process.env.FAMILY_CODE,
   };
@@ -148,8 +150,6 @@ export default async (req) => {
       if ("want" in body) next.want = !!body.want;
       if ("rating" in body) next.rating = Math.max(0, Math.min(5, Number(body.rating) || 0));
       if ("note" in body) next.note = clean(body.note, 280);
-      if ("qty" in body) next.qty = Math.max(1, Math.min(20, Math.round(Number(body.qty) || 1)));
-      if ("size" in body) next.size = Math.max(0, Math.min(5, Math.round(Number(body.size) || 0)));
       if (next.rating > 0) next.tried = true;
       // A snapshot keeps your passport readable after the festival (and its menu) moves on.
       if (body.snapshot && typeof body.snapshot === "object") {
@@ -245,6 +245,16 @@ export default async (req) => {
       return json({ ok: true, saved: true, preview });
     }
 
+    // Family purchases are separate from "tried it": several people can share one drink.
+    if (method === "POST" && path === "tab") {
+      const drinkId = clean(body.drinkId, 200);
+      if (!drinkId) return json({ error: "drinkId is required" }, 400);
+      const counts = (Array.isArray(body.counts) ? body.counts : [body.counts]).slice(0, 6).map((n) => Math.max(0, Math.min(50, Math.round(Number(n) || 0))));
+      const entry = { drinkId, counts, by: clean(body.member, 24), at: new Date().toISOString() };
+      await s.setJSON(`tab/${encodeURIComponent(drinkId)}`, entry);
+      return json({ ok: true, entry });
+    }
+
     if (method === "POST" && path === "visit/new") {
       if (!refreshAllowed(req)) return json({ error: "Wrong password" }, 403);
       const st = await getState(req);
@@ -256,7 +266,7 @@ export default async (req) => {
           id, name: d?.name || sn.name || "A drink", booth: d?.booth || sn.booth || "", price: d?.price || sn.price || "",
           type: d?.type || sn.type || "cocktail", country: d?.country || sn.country || "park",
           festival: d ? (d.yearRound ? "Year-round" : festName) : sn.festival || "",
-          rating: it.rating || 0, note: it.note || "", at: it.at || null, qty: it.qty || 1, size: it.size || 0,
+          rating: it.rating || 0, note: it.note || "", at: it.at || null,
         };
       };
       const archived = st.members.map((m) => ({
@@ -279,9 +289,20 @@ export default async (req) => {
       const firstAt = archived.flatMap((m) => m.tried.map((t) => t.at)).filter(Boolean).sort()[0] || now;
       const startedAt = st.visit?.startedAt && st.visit.startedAt < firstAt ? st.visit.startedAt : firstAt;
       const id = `v-${now.replace(/[^0-9]/g, "").slice(0, 14)}`;
+      // What the family bought: every drink anyone tried (1 assumed if nobody set a count).
+      const priceList = (p) => [...String(p || "").matchAll(/\$\s?(\d+(?:\.\d{1,2})?)/g)].map((m) => parseFloat(m[1]));
+      const triedIds = [...new Set(archived.flatMap((m) => m.tried.map((t) => t.id)))];
+      const any = Object.fromEntries(archived.flatMap((m) => m.tried.map((t) => [t.id, t])));
+      const purchases = triedIds.map((did) => {
+        const t = any[did], ps = priceList(t.price), e = st.tab?.[did];
+        const counts = e ? e.counts : [1];
+        const cost = ps.length ? counts.reduce((sum, n, i) => sum + n * ps[Math.min(i, ps.length - 1)], 0) : null;
+        return { id: did, name: t.name, booth: t.booth, country: t.country, type: t.type, price: t.price, counts, assumed: !e, cost };
+      });
+      const spend = { drinks: purchases.reduce((n, p) => n + p.counts.reduce((a, b) => a + b, 0), 0), dollars: Math.round(purchases.reduce((n, p) => n + (p.cost || 0), 0) * 100) / 100 };
       const visitRec = {
         id, name: clean(body.name, 60) || `${festName} visit`, festival: festName,
-        startedAt, endedAt: now, endedBy: clean(body.member, 24), favorites, members: archived,
+        startedAt, endedAt: now, endedBy: clean(body.member, 24), favorites, members: archived, purchases, spend,
       };
       await s.setJSON(`visits/${id}`, visitRec);
 
@@ -291,6 +312,7 @@ export default async (req) => {
         for (const [did, it] of Object.entries(m.items || {})) if (it.want && !it.tried) keep[did] = { want: true, ...(it.snap ? { snap: it.snap } : {}), at: it.at };
         await s.setJSON(memberKey(m.name), { ...m, items: keep, updated: now });
       }
+      for (const did of Object.keys(st.tab || {})) await s.delete(`tab/${encodeURIComponent(did)}`);
       await s.setJSON("config/visit", { startedAt: now });
       return json({ ok: true, visit: { id, name: visitRec.name, tried: triedCount, favorites } });
     }
