@@ -31,16 +31,16 @@ export const LANDMARKS = {
   seas:              { lat: 28.3749084, lng: -81.5506814, name: "The Seas" },
 };
 
-// Extra named spots where festival booths often sit.
+// Extra named spots where festival booths often sit (placed from OpenStreetMap footprints).
 const EXTRA = {
-  "showcase-plaza":        { lat: 28.37215, lng: -81.54940, name: "Showcase Plaza" },
-  "plaza-mexico-side":     { lat: 28.37195, lng: -81.54835, name: "Showcase Plaza (Mexico side)" },
-  "plaza-canada-side":     { lat: 28.37195, lng: -81.55040, name: "Showcase Plaza (Canada side)" },
-  "port-of-entry":         { lat: 28.37220, lng: -81.54870, name: "Near Port of Entry" },
-  "disney-traders":        { lat: 28.37220, lng: -81.55010, name: "Near Disney Traders" },
-  "culinary-corridor":     { lat: 28.37245, lng: -81.55070, name: "Walkway by Imagination" },
-  "east-walkway":          { lat: 28.37255, lng: -81.54810, name: "Walkway by Test Track" },
-  creations:               { lat: 28.37470, lng: -81.54875, name: "Near Creations Shop" },
+  "showcase-plaza":        { lat: 28.37145, lng: -81.54939, name: "Showcase Plaza" },
+  "plaza-mexico-side":     { lat: 28.37150, lng: -81.54850, name: "Showcase Plaza (Mexico side)" },
+  "plaza-canada-side":     { lat: 28.37150, lng: -81.55030, name: "Showcase Plaza (Canada side)" },
+  "port-of-entry":         { lat: 28.37170, lng: -81.54980, name: "Near Port of Entry" },
+  "disney-traders":        { lat: 28.37170, lng: -81.54899, name: "Near Disney Traders" },
+  "culinary-corridor":     { lat: 28.37225, lng: -81.55030, name: "Walkway by Imagination" },
+  "east-walkway":          { lat: 28.37225, lng: -81.54830, name: "Walkway by Test Track" },
+  creations:               { lat: 28.37356, lng: -81.54885, name: "Near Creations Shop" },
   connections:             { lat: 28.37445, lng: -81.54905, name: "Connections Eatery" },
 };
 

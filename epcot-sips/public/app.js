@@ -1,6 +1,7 @@
 // Epcot Sips — front end (vanilla JS, no build step)
 
 import { icon, flag, flagBody, TYPE_ICON, LANDMARKS, spaceshipEarth, AVATARS, avatar } from "/icons.js";
+import { MAP } from "/map-data.js";
 
 const TYPE_LABEL = {
   beer: "Beer", cider: "Cider", wine: "Wine", sparkling: "Bubbly", cocktail: "Cocktail",
@@ -277,229 +278,74 @@ const el = (tag, attrs = {}, parent) => {
   parent?.appendChild(e);
   return e;
 };
-// Deterministic randomness so trees don't jump around between renders.
-function rng(seed) { return () => { seed |= 0; seed = seed + 0x6d2b79f5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
-const circ = (x, y, r) => `M${(x - r).toFixed(1)} ${y.toFixed(1)}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0`;
-function hull(pts) {
-  const p = [...pts].sort((a, b) => a.x - b.x || a.y - b.y);
-  const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
-  const lo = [], up = [];
-  for (const q of p) { while (lo.length >= 2 && cross(lo[lo.length - 2], lo[lo.length - 1], q) <= 0) lo.pop(); lo.push(q); }
-  for (const q of p.reverse()) { while (up.length >= 2 && cross(up[up.length - 2], up[up.length - 1], q) <= 0) up.pop(); up.push(q); }
-  return lo.slice(0, -1).concat(up.slice(0, -1));
-}
-function inPoly(pt, poly) {
-  let inside = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const a = poly[i], b = poly[j];
-    if ((a.y > pt.y) !== (b.y > pt.y) && pt.x < (b.x - a.x) * (pt.y - a.y) / (b.y - a.y) + a.x) inside = !inside;
-  }
-  return inside;
-}
-function segDist(p, a, b) {
-  const dx = b.x - a.x, dy = b.y - a.y, L = dx * dx + dy * dy || 1;
-  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / L));
-  return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
-}
-
 function buildMap() {
-  const A = D().anchors;
-  const ring = D().ring;
-  const lat0 = ring.reduce((s, id) => s + A[id].lat, 0) / ring.length;
-  const lng0 = ring.reduce((s, id) => s + A[id].lng, 0) / ring.length;
-  geo = { lat0, lng0, pts: {} };
+  const A = D().anchors, ring = D().ring, M = MAP.layers, L = MAP.labels;
+  geo = { lat0: MAP.origin.lat, lng0: MAP.origin.lng, pts: {} };
   for (const [id, a] of Object.entries(A)) geo.pts[id] = project(a.lat, a.lng);
   const P = geo.pts;
-  const C = { x: 0, y: 0 };
-  ring.forEach((id) => { C.x += P[id].x / ring.length; C.y += P[id].y / ring.length; });
-  geo.center = C;
-  const loopIds = ["plaza-mexico-side", ...ring, "plaza-canada-side"];
-  // Polar-smoothed loop so the lagoon reads as a lagoon, not a polygon.
-  const polar = loopIds.map((id) => { const p = P[id]; return { a: Math.atan2(p.y - C.y, p.x - C.x), r: Math.hypot(p.x - C.x, p.y - C.y) }; });
-  const sm = polar.map((p, i) => {
-    const n = polar.length, w = [0.2, 0.6, 0.2];
-    return { a: p.a, r: w[0] * polar[(i - 1 + n) % n].r + w[1] * p.r + w[2] * polar[(i + 1) % n].r };
-  });
-  const loop = (k, dense = 4) => {
-    const pts = [];
-    for (let i = 0; i < sm.length; i++) {
-      const p = sm[i], q = sm[(i + 1) % sm.length];
-      let da = q.a - p.a; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
-      for (let j = 0; j < dense; j++) {
-        const t = j / dense, a = p.a + da * t, r = (p.r + (q.r - p.r) * t) * k;
-        pts.push({ x: C.x + Math.cos(a) * r, y: C.y + Math.sin(a) * r });
-      }
-    }
-    return pts;
-  };
-  const unit = loop(1, 10);
-  const Rat = (x, y) => {           // loop radius in the direction of (x, y)
-    const a = Math.atan2(y - C.y, x - C.x);
-    let best = unit[0], bd = 9;
-    for (const q of unit) { let d = Math.abs(Math.atan2(q.y - C.y, q.x - C.x) - a); if (d > Math.PI) d = 2 * Math.PI - d; if (d < bd) { bd = d; best = q; } }
-    return Math.hypot(best.x - C.x, best.y - C.y);
-  };
-  const out = (p, dist) => { const d = Math.hypot(p.x - C.x, p.y - C.y) || 1; return { x: p.x + (p.x - C.x) / d * dist, y: p.y + (p.y - C.y) / d * dist }; };
-  const prom = loop(0.8);
-  const lag = loop(0.69);
-  const deep = loop(0.63);
-  const se = P["spaceship-earth"];
-  const entrance = { x: se.x, y: se.y + 120 };
-  const gateMid = { x: (P.france.x + P.uk.x) / 2, y: (P.france.y + P.uk.y) / 2 };
-  const gateIn = out(gateMid, -Math.hypot(gateMid.x - C.x, gateMid.y - C.y) * 0.18);
-  const gate = out(gateMid, 95);
-  geo.gate = gate; geo.entrance = entrance;
-
-  // Park boundary: hull around the loop, Future World, the entrance and the Gateway.
-  const land = hull([...loop(1.2, 2), ...Object.values(P).map((p) => out(p, 60)), { x: entrance.x - 90, y: entrance.y + 40 }, { x: entrance.x + 90, y: entrance.y + 40 }, out(gate, 30)]);
-  const landD = smooth(land, true);
+  const xy = ([x, y]) => ({ x, y });
+  geo.center = xy(L.lagoon);
+  geo.entrance = { x: (L.tickets[0][0] + L.tickets[1][0]) / 2, y: (L.tickets[0][1] + L.tickets[1][1]) / 2 + 18 };
+  geo.gate = xy(L.gateway);
 
   const svg = $("#map");
   svg.innerHTML = "";
   const defs = el("defs", {}, svg);
   defs.innerHTML = `
-    <radialGradient id="lagoonG" cx="50%" cy="50%" r="55%"><stop offset="0" stop-color="var(--water-deep)"/><stop offset=".75" stop-color="var(--water)"/><stop offset="1" stop-color="var(--water)"/></radialGradient>
+    <radialGradient id="lagoonG" cx="${L.lagoon[0]}" cy="${L.lagoon[1]}" r="380" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="var(--water-deep)"/><stop offset=".7" stop-color="var(--water)"/><stop offset="1" stop-color="var(--water-shallow)"/></radialGradient>
     <pattern id="forestP" width="46" height="40" patternUnits="userSpaceOnUse">
       <rect width="46" height="40" fill="var(--forest)"/>
       <g fill="var(--forest-2)"><circle cx="8" cy="9" r="9"/><circle cx="30" cy="6" r="8"/><circle cx="20" cy="26" r="10"/><circle cx="42" cy="28" r="8"/><circle cx="2" cy="34" r="7"/></g>
       <g fill="#5d8a50"><circle cx="6" cy="7" r="5"/><circle cx="28" cy="4" r="4.5"/><circle cx="18" cy="23" r="6"/><circle cx="40" cy="25" r="4.5"/></g>
     </pattern>
-    <pattern id="grassP" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M3 5l1-2M13 15l1-2M19 4l1-2M8 20l1-2" stroke="var(--grass-2)" stroke-width="1.2"/></pattern>
-    <pattern id="paveP" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="var(--pave)"/><path d="M0 8h8M8 0v8" stroke="var(--pave-edge)" stroke-width=".35" opacity=".7"/></pattern>
+    <pattern id="treesP" width="22" height="20" patternUnits="userSpaceOnUse">
+      <rect width="22" height="20" fill="var(--tree-lo)"/>
+      <g fill="var(--tree)"><circle cx="5" cy="5" r="5"/><circle cx="16" cy="4" r="4.4"/><circle cx="10" cy="14" r="5.4"/><circle cx="21" cy="15" r="4"/><circle cx="0" cy="17" r="3.6"/></g>
+      <g fill="var(--tree-hi)" opacity=".8"><circle cx="3.6" cy="3.6" r="2.2"/><circle cx="14.8" cy="2.8" r="1.9"/><circle cx="8.4" cy="12.4" r="2.4"/><circle cx="19.8" cy="13.8" r="1.7"/></g>
+    </pattern>
+    <pattern id="flowerP" width="5" height="5" patternUnits="userSpaceOnUse"><rect width="5" height="5" fill="var(--grass-2)"/><circle cx="1.3" cy="1.3" r=".9" fill="#e36a92"/><circle cx="3.8" cy="3.6" r=".8" fill="#f4cf55"/></pattern>
     <radialGradient id="seG" cx="35%" cy="30%" r="80%"><stop offset="0" stop-color="#fbfdff"/><stop offset=".45" stop-color="#c6ccd3"/><stop offset="1" stop-color="#6f7780"/></radialGradient>
     <radialGradient id="seShine" cx="30%" cy="25%" r="35%"><stop offset="0" stop-color="#fff" stop-opacity=".8"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
-    <clipPath id="seClip"><circle r="16"/></clipPath>
-    <clipPath id="landClip"><path d="${landD}"/></clipPath>
-    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="3"/></filter>`;
+    <clipPath id="seClip"><circle r="16"/></clipPath>`;
 
-  const world = el("g", { id: "world" }, svg);
+  // Everything below is drawn from the park's real footprints (scripts/build-map.mjs), in meters.
+  const world = el("g", { id: "world", "stroke-linejoin": "round", "stroke-linecap": "round" }, svg);
+  const C = geo.center;
+  const fill = (d, attrs) => d && el("path", { d, ...attrs }, world);
+  const line = (d, w, color, extra = {}) => d && el("path", { d, fill: "none", stroke: color, "stroke-width": w, ...extra }, world);
   el("rect", { x: C.x - 1600, y: C.y - 1600, width: 3200, height: 3200, fill: "url(#forestP)" }, world);
-  // Land + berm
-  el("path", { d: landD, fill: "#2f5528", opacity: .5, transform: "translate(5 7)", filter: "url(#soft)" }, world);
-  el("path", { d: landD, fill: "var(--grass)", stroke: "#3d6634", "stroke-width": 5 }, world);
-  el("path", { d: landD, fill: "url(#grassP)" }, world);
-
-  // Walkways (Future World + entrance + Gateway)
-  const walks = [
-    ["plaza-mexico-side", "east-walkway", "odyssey", "test-track", "mission-space", "guardians", "creations", "spaceship-earth"],
-    ["plaza-canada-side", "culinary-corridor", "imagination", "the-land", "seas", "spaceship-earth"],
-    ["showcase-plaza", "communicore", "connections", "spaceship-earth"],
-  ].map((w) => w.map((id) => P[id]));
-  walks.push([se, { x: se.x, y: se.y + 60 }, entrance]);
-  walks.push([gateIn, gateMid, gate]);
-  geo.walks = walks;
-  const walkG = el("g", {}, world);
-  const paveStroke = (d, w) => {
-    el("path", { d, fill: "none", stroke: "var(--pave-edge)", "stroke-width": w + 5, "stroke-linecap": "round", "stroke-linejoin": "round" }, walkG);
-    el("path", { d, fill: "none", stroke: "var(--pave)", "stroke-width": w, "stroke-linecap": "round", "stroke-linejoin": "round" }, walkG);
-  };
-  for (const w of walks) paveStroke(smooth(w, false), 18);
-  // Plazas
-  const plaza = (cx, cy, rx, ry) => {
-    el("ellipse", { cx, cy, rx: rx + 2.5, ry: ry + 2.5, fill: "var(--pave-edge)" }, walkG);
-    el("ellipse", { cx, cy, rx, ry, fill: "url(#paveP)" }, walkG);
-  };
-  plaza(P.communicore.x, P.communicore.y, 40, 40);
-  plaza((P["plaza-mexico-side"].x + P["plaza-canada-side"].x) / 2, P["showcase-plaza"].y, 118, 26);
-  plaza(se.x, se.y, 44, 44);
-  plaza(entrance.x, entrance.y, 70, 26);
-  // Entrance flower beds + CommuniCore fountain
-  const beds = rng(7);
-  for (let i = 0; i < 26; i++) {
-    const a = beds() * Math.PI * 2, r = 30 + beds() * 8;
-    el("circle", { cx: se.x + Math.cos(a) * 48 * (i % 2 ? 1 : 1.12), cy: se.y + Math.sin(a) * 48 * (i % 2 ? 1 : 1.12), r: 2.4, fill: ["#e05a8a", "#f2c94c", "#ffffff", "#c8405a"][i % 4] }, walkG);
-  }
-  el("circle", { cx: P.communicore.x, cy: P.communicore.y, r: 13, fill: "var(--water)", stroke: "#fff", "stroke-width": 2 }, walkG);
-  el("circle", { cx: P.communicore.x, cy: P.communicore.y, r: 5, fill: "var(--water-shallow)" }, walkG);
-
-  // Promenade
-  const promD = smooth(prom, true);
-  el("path", { d: promD, fill: "none", stroke: "var(--pave-edge)", "stroke-width": 40, "stroke-linejoin": "round" }, world);
-  el("path", { d: promD, fill: "none", stroke: "url(#paveP)", "stroke-width": 35, "stroke-linejoin": "round" }, world);
-  el("path", { d: promD, fill: "none", stroke: "var(--pave-edge)", "stroke-width": 1, "stroke-dasharray": "6 5", opacity: .8 }, world);
-
-  // Pavilion courtyards, facing the lagoon
-  const padG = el("g", {}, world);
-  for (const id of ring) {
-    const p = out(P[id], 12), ang = Math.atan2(p.y - C.y, p.x - C.x) * 180 / Math.PI + 90;
-    const g = el("g", { transform: `translate(${p.x.toFixed(1)} ${p.y.toFixed(1)}) rotate(${ang.toFixed(1)})` }, padG);
-    el("rect", { x: -40, y: -22, width: 80, height: 44, fill: "var(--pave-edge)" }, g);
-    el("rect", { x: -38, y: -20, width: 76, height: 40, fill: "url(#paveP)" }, g);
-    el("rect", { x: -26, y: -34, width: 52, height: 16, fill: "#d9cfb8", stroke: "#b9aa88", "stroke-width": 1 }, g);
-  }
-
-  // Lagoon: shore, shallows, deep water, waves, a couple of FriendShip boats
-  const lagD = smooth(lag, true);
-  el("path", { d: lagD, fill: "none", stroke: "var(--shore)", "stroke-width": 9, "stroke-linejoin": "round" }, world);
-  el("path", { d: lagD, fill: "var(--water-shallow)" }, world);
-  el("path", { d: smooth(deep, true), fill: "url(#lagoonG)" }, world);
-  const wr = rng(42);
-  let waves = "";
-  for (let i = 0; i < 90; i++) {
-    const x = C.x + (wr() - .5) * 700, y = C.y + (wr() - .5) * 560;
-    if (Math.hypot(x - C.x, y - C.y) > Rat(x, y) * 0.58) continue;
-    waves += `M${x.toFixed(1)} ${y.toFixed(1)}q3.5-3 7 0t7 0`;
-  }
-  el("path", { d: waves, fill: "none", stroke: "#fff", "stroke-width": 1.3, opacity: .45, "stroke-linecap": "round" }, world);
-  const boat = (x, y, rot) => {
-    const g = el("g", { transform: `translate(${x} ${y}) rotate(${rot})` }, world);
-    el("path", { d: "M-14 0 0-2l0 0M-26 6q16 8 52 0", fill: "none", stroke: "#fff", "stroke-width": 1, opacity: .7 }, g);
-    el("path", { d: "M-12-4h22l4 4-4 4h-22z", fill: "#fff", stroke: "#2a241e", "stroke-width": .8 }, g);
-    el("rect", { x: -8, y: -3, width: 14, height: 6, fill: "#2d6aa8" }, g);
-  };
-  boat(C.x - 60, C.y + 70, -20); boat(C.x + 90, C.y - 40, 160);
-
-  // Future World / World Celebration buildings (map-scale footprints)
-  const fw = el("g", {}, world);
-  const bld = (id, fn) => { const p = P[id]; if (!p) return; const g = el("g", { transform: `translate(${p.x.toFixed(1)} ${p.y.toFixed(1)})` }, fw); fn(g); };
-  const shadowed = (g, tag, attrs) => { el(tag, { ...attrs, fill: "#1d2a17", opacity: .22, transform: "translate(4 5)" }, g); el(tag, attrs, g); };
-  bld("the-land", (g) => { shadowed(g, "rect", { x: -60, y: -34, width: 120, height: 68, fill: "#dcd8c8", stroke: "#8e8870", "stroke-width": 1.2 });
-    el("path", { d: "M-50-24l20 20-20 20M-20-24 0-4-20 16M10-24l20 20-20 20M40-24 55-4 40 16", fill: "none", stroke: "#8fb9bf", "stroke-width": 7, "stroke-linejoin": "round", opacity: .9 }, g); });
-  bld("imagination", (g) => { [[-20, 6, 26], [16, -4, 34]].forEach(([x, y, s]) => { shadowed(g, "path", { d: `M${x - s / 2} ${y + s / 2}L${x} ${y - s / 2}L${x + s / 2} ${y + s / 2}z`, fill: "#b8dbe8", stroke: "#4f8aa3", "stroke-width": 1.2 });
-    el("path", { d: `M${x} ${y - s / 2}V${y + s / 2}`, stroke: "#4f8aa3", "stroke-width": .8 }, g); }); });
-  bld("seas", (g) => { shadowed(g, "path", { d: "M-55 20C-55-10-30-30 0-26S55-6 55 20z", fill: "#c9e3ea", stroke: "#5f96a8", "stroke-width": 1.2 });
-    el("path", { d: "M-44 8q11-10 22 0t22 0 22 0 22 0", fill: "none", stroke: "#3f8fb0", "stroke-width": 3 }, g); });
-  bld("mission-space", (g) => { shadowed(g, "circle", { r: 26, fill: "#c9653f", stroke: "#7d3a24", "stroke-width": 1.2 });
-    el("ellipse", { rx: 38, ry: 9, fill: "none", stroke: "#e9c9a2", "stroke-width": 3, transform: "rotate(-18)" }, g);
-    el("circle", { cx: 34, cy: -22, r: 7, fill: "#8a9aa6", stroke: "#4a5058" }, g); el("circle", { cx: -30, cy: 24, r: 5, fill: "#d9a441", stroke: "#7d5a24" }, g); });
-  bld("test-track", (g) => { el("rect", { x: -80, y: -34, width: 110, height: 68, rx: 34, fill: "none", stroke: "#6b737b", "stroke-width": 7 }, g);
-    el("rect", { x: -80, y: -34, width: 110, height: 68, rx: 34, fill: "none", stroke: "#e8e8e8", "stroke-width": 1, "stroke-dasharray": "5 5" }, g);
-    shadowed(g, "rect", { x: -44, y: -18, width: 54, height: 36, fill: "#d8dbe0", stroke: "#6b737b", "stroke-width": 1.2 }); el("path", { d: "M-44-6h54", stroke: "#c4302a", "stroke-width": 3 }, g); });
-  bld("guardians", (g) => { shadowed(g, "rect", { x: -44, y: -28, width: 88, height: 56, fill: "#5d4f86", stroke: "#2f2745", "stroke-width": 1.2 });
-    el("path", { d: "M-44 0h88M-22-28v56M22-28v56", stroke: "#8573b8", "stroke-width": 1 }, g); el("circle", { r: 9, fill: "#e5b93f", stroke: "#2f2745" }, g); });
-  bld("odyssey", (g) => shadowed(g, "path", { d: "M-18-10 0-20 18-10v20L0 20-18 10z", fill: "#e2dccd", stroke: "#8e8870", "stroke-width": 1.2 }));
-  bld("communicore", (g) => { ["M-62-18A64 64 0 0 1-18-62", "M18-62A64 64 0 0 1 62-18", "M62 18A64 64 0 0 1 18 62", "M-18 62A64 64 0 0 1-62 18"].forEach((d) => {
-    el("path", { d, fill: "none", stroke: "#1d2a17", "stroke-width": 16, opacity: .2, transform: "translate(4 5)" }, g);
-    el("path", { d, fill: "none", stroke: "#ece6d6", "stroke-width": 16 }, g); el("path", { d, fill: "none", stroke: "#a9a28c", "stroke-width": 1, transform: "scale(1.13)" }, g); }); });
-
-  // Trees: seeded scatter across open grass, clear of water, paths and buildings.
-  const rt = rng(1234);
-  const avoid = [...ring.map((id) => [out(P[id], 12), 46]), ...["the-land", "imagination", "seas", "mission-space", "test-track", "guardians", "odyssey", "communicore", "spaceship-earth", "creations", "connections"].map((id) => [P[id], 72]), [entrance, 80]];
-  const bb = land.reduce((b, p) => ({ x0: Math.min(b.x0, p.x), x1: Math.max(b.x1, p.x), y0: Math.min(b.y0, p.y), y1: Math.max(b.y1, p.y) }), { x0: 1e9, x1: -1e9, y0: 1e9, y1: -1e9 });
-  const shade = ["", "", ""], hi = [], lo = [];
-  let placed = 0;
-  for (let i = 0; i < 2600 && placed < 520; i++) {
-    const p = { x: bb.x0 + rt() * (bb.x1 - bb.x0), y: bb.y0 + rt() * (bb.y1 - bb.y0) };
-    if (!inPoly(p, land)) continue;
-    const rr = Math.hypot(p.x - C.x, p.y - C.y), R = Rat(p.x, p.y);
-    if (rr < R * 0.69 + 8) continue;                               // lagoon + shore
-    if (Math.abs(rr - R * 0.8) < 26) continue;                      // promenade
-    if (avoid.some(([q, d]) => Math.hypot(p.x - q.x, p.y - q.y) < d)) continue;
-    if (walks.some((w) => w.some((q, k) => k && segDist(p, w[k - 1], q) < 18))) continue;
-    if (Math.abs(p.y - P["showcase-plaza"].y) < 34 && Math.abs(p.x - (P["plaza-mexico-side"].x + P["plaza-canada-side"].x) / 2) < 130) continue;
-    const r = 5 + rt() * 5;
-    lo.push(circ(p.x + 2.5, p.y + 3, r));
-    shade[placed % 3] += circ(p.x, p.y, r);
-    hi.push(circ(p.x - r * .3, p.y - r * .3, r * .45));
-    placed++;
-  }
-  const treeG = el("g", {}, world);
-  el("path", { d: lo.join(""), fill: "#1d2a17", opacity: .28 }, treeG);
-  ["var(--tree)", "var(--tree-lo)", "#6fa352"].forEach((c, k) => el("path", { d: shade[k], fill: c, stroke: "#2f5226", "stroke-width": .6 }, treeG));
-  el("path", { d: hi.join(""), fill: "var(--tree-hi)", opacity: .75 }, treeG);
-
-  // Spaceship Earth, drawn to scale
-  const sg = el("g", { transform: `translate(${se.x} ${se.y}) scale(1.9)` }, world);
+  // Inside the park, anything that isn't garden, water or a building is walkable pavement.
+  fill(M.park, { fill: "#2f5528", opacity: .45, transform: "translate(3 4)" });
+  fill(M.park, { fill: "var(--pave)", stroke: "#3d6634", "stroke-width": 3 });
+  fill(M.parking, { fill: "#d9d4c8" });
+  line(M.road, 10, "#cfc8b6");
+  line(M.service, 5, "#ddd4bf");
+  fill(M.garden, { fill: "var(--grass)", stroke: "var(--grass-edge)", "stroke-width": .5 });
+  fill(M.flowers, { fill: "url(#flowerP)" });
+  fill(M.forest, { fill: "url(#treesP)", stroke: "var(--tree-lo)", "stroke-width": .6 });
+  fill(M.sand, { fill: "var(--shore)" });
+  // Water, with a sandy shore and the lagoon deepening toward the middle.
+  fill(M.water, { fill: "none", stroke: "var(--shore)", "stroke-width": 3 });
+  fill(M.water, { fill: "url(#lagoonG)", "fill-rule": "evenodd" });
+  line(M.canal, 3, "var(--water)");
+  // Walkways over the gardens: a thin edge, then the pavement.
+  line(M.walkW, 10, "var(--pave-edge)"); line(M.walk, 4.6, "var(--pave-edge)"); line(M.path, 3, "var(--pave-edge)");
+  line(M.walkW, 8.6, "var(--pave)"); line(M.walk, 3.4, "var(--pave)"); line(M.path, 2, "var(--pave)");
+  fill(M.plaza, { fill: "var(--pave)" });
+  line(M.pier, 2.5, "#b48a5a");
+  fill(M.bridge, { fill: "var(--pave)", stroke: "var(--pave-edge)", "stroke-width": .8 });
+  // Buildings with a soft drop shadow; rides/shows get a warmer roof.
+  const bshadow = [M.bld, M.attr, M.glass].filter(Boolean).join("");
+  fill(bshadow, { fill: "#1d2a17", opacity: .22, transform: "translate(1.6 2.2)" });
+  fill(M.bld, { fill: "var(--bld)", stroke: "var(--bld-edge)", "stroke-width": .6 });
+  fill(M.attr, { fill: "var(--bld-attr)", stroke: "var(--bld-attr-edge)", "stroke-width": .7 });
+  fill(M.glass, { fill: "#cfe6ea", stroke: "#7fa9b3", "stroke-width": .6 });
+  fill(M.roof, { fill: "var(--bld)", opacity: .75, stroke: "var(--bld-edge)", "stroke-width": .5, "stroke-dasharray": "1.5 1.2" });
+  // Monorail beam
+  line(M.monorail, 4, "#7f8890"); line(M.monorail, 2, "#c9ced3");
+  // Spaceship Earth (a 50 m sphere), drawn on its real footprint
+  const se = L.spaceshipEarth;
+  const sg = el("g", { transform: `translate(${se[0].toFixed(1)} ${se[1].toFixed(1)}) scale(1.6)` }, world);
   sg.innerHTML = spaceshipEarth();
 
   // Bounds → initial fit

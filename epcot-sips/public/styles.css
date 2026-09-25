@@ -41,6 +41,11 @@
   --tree: #5f9448;
   --tree-hi: #86b862;
   --tree-lo: #3f6e33;
+  --grass-edge: #8fb06c;
+  --bld: #ece3cf;
+  --bld-edge: #a8987a;
+  --bld-attr: #e9cfa6;
+  --bld-attr-edge: #a57f4c;
   --label: #1a1d20;
   --label-halo: #fbf7ec;
   --map-dim: 0;
@@ -213,6 +218,7 @@ body:not([data-tab="map"]) .map-view { display: none; }
 .compass { position: absolute; left: 10px; bottom: 164px; z-index: 4; width: 44px; height: 44px; transition: opacity .2s; filter: drop-shadow(0 2px 3px rgba(0,0,0,.3)); }
 .scale { position: absolute; left: 12px; bottom: 140px; z-index: 4; font-family: var(--display); font-weight: 700; font-size: .7rem; letter-spacing: .08em; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.6); transition: bottom .28s; }
 .scale .bar { height: 6px; border: 1.5px solid #fff; border-top: 0; margin-top: 2px; background: linear-gradient(90deg, rgba(0,0,0,.55) 50%, rgba(255,255,255,.85) 50%); box-shadow: 0 1px 2px rgba(0,0,0,.4); }
+.scale .osm { display: block; margin-top: 3px; font-family: var(--body); font-weight: 500; font-size: .55rem; letter-spacing: 0; opacity: .75; }
 body[data-drawer="half"] .scale, body[data-drawer="full"] .scale, body[data-drawer="half"] .compass, body[data-drawer="full"] .compass { opacity: 0; }
 
 /* Drawer */
