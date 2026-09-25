@@ -240,8 +240,10 @@ function render() {
   let html = "";
   if (state.tab === "list") html = renderList();
   else if (state.tab === "family") html = renderFamily();
+  else if (state.tab === "buzz") html = renderBuzz();
   else html = renderPassport();
   view.innerHTML = banner + html;
+  if (state.tab === "buzz") wireBuzzChart();
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -1231,6 +1233,149 @@ function renderPassport() {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
+//  BUZZ METER (just for fun)
+// ══════════════════════════════════════════════════════════════════════════
+const BUZZ = [
+  "Stone-cold sober", "Just a sip", "Warming up", "Chatty", "Giggly", "Humming the Figment song",
+  "Dancing in Germany", "Hugging a Cast Member", "Proposing to Spaceship Earth", "Seeing Figment for real", "Tap out — water & a bench",
+];
+const NO_BUZZ_TYPES = new Set(["na", "coffee"]);
+const SERIES = 8; // categorical slots --s1…--s8 (validated palette), assigned by name so colors never shuffle
+const buzzLog = (m) => (Array.isArray(m?.buzz) ? m.buzz : []);
+const nowBuzz = (m) => { const l = buzzLog(m); return l.length ? l[l.length - 1].level : null; };
+const fmtTime = (ms, withDay) => new Date(ms).toLocaleString("en-US", withDay ? { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" } : { hour: "numeric", minute: "2-digit" });
+let buzzSeries = null;
+
+function buzzPeople() {
+  return [...members()].sort((a, b) => a.name.localeCompare(b.name)).map((m, i) => ({ m, slot: (i % SERIES) + 1, pts: buzzLog(m).map((b) => ({ t: Date.parse(b.at), v: b.level, drinkId: b.drinkId })) }));
+}
+
+function renderBuzz() {
+  const people = buzzPeople();
+  const me = state.me ? people.find((p) => sameName(p.m.name, state.me.name)) : null;
+  const mine = me ? nowBuzz(me.m) : null;
+  const logged = people.filter((p) => p.pts.length);
+  const peak = logged.flatMap((p) => p.pts.map((pt) => ({ p, ...pt }))).sort((a, b) => b.v - a.v || a.t - b.t)[0];
+  return `
+    <h2 class="section-title">Buzz meter</h2>
+    <p class="section-sub">Just for fun. 0 = stone-cold sober, 10 = time for water and a bench.</p>
+
+    <div class="card buzz-me"><h3>${icon("bolt")}Your buzz</h3><div class="rows">
+      ${state.me ? `
+        <div class="buzz-now"><b>${mine ?? "–"}</b><span><small>out of 10</small>${mine != null ? esc(BUZZ[mine]) : "Not logged yet"}</span></div>
+        ${buzzPicker(mine)}
+        ${me?.pts.length ? `<button class="linkbtn" data-buzz-undo>${icon("close")}Undo my last entry</button>` : ""}
+        ${mine != null && mine >= 7 ? `<div class="note water">${icon("info")}Water break? Any quick-service counter will give you a free cup of ice water.</div>` : ""}`
+      : `<p class="muted">Pick your name first.</p><button class="btn accent" data-join>Join the family</button>`}
+    </div></div>
+
+    <div class="card"><h3>${icon("family")}Family buzz</h3><div class="rows">
+      ${logged.length ? `
+        <div class="legend">${logged.map((p) => `<span class="lg"><i style="background:var(--s${p.slot})"></i>${esc(p.m.name)} <b>${nowBuzz(p.m)}</b></span>`).join("")}</div>
+        <div class="buzz-chart" id="buzzChart">${buzzChartSVG(logged)}<div class="buzz-tip" hidden></div></div>
+        ${peak ? `<p class="muted buzz-foot">Peak so far: <b>${esc(peak.p.m.name)}</b> hit ${peak.v}/10 at ${fmtTime(peak.t)}.</p>` : ""}`
+      : `<div class="empty"><div class="e">${icon("bolt")}</div><p>No buzz logged yet. Tap "Tried it" on a drink, or log yours above.</p></div>`}
+    </div></div>
+
+    ${logged.length ? `<div class="card"><h3>${icon("list")}Right now</h3><div class="rows">${people.map((p) => {
+      const n = nowBuzz(p.m), pk = p.pts.reduce((a, b) => Math.max(a, b.v), -1);
+      return `<div class="leader">${avatar(p.m.emoji)}<div class="who"><b>${esc(p.m.name)}</b><small>${n != null ? `${esc(BUZZ[n])} · peak ${pk}` : "not logged"}</small></div>
+        <div class="score">${n ?? "–"}<small>of 10</small></div></div>`;
+    }).join("")}</div></div>` : ""}
+    <p class="muted" style="font-size:.78rem;text-align:center;margin-top:18px">Buzz is a joke meter, not a measurement. Drink water, pace yourself, and never drive after drinking.</p>`;
+}
+
+function buzzPicker(cur) {
+  return `<div class="buzz-pick">${BUZZ.map((label, n) => `<button data-buzz="${n}" class="${cur === n ? "on" : ""}" style="--lvl:${n / 10}" title="${esc(label)}" aria-label="${n} — ${esc(label)}">${n}</button>`).join("")}</div>`;
+}
+
+// Line chart: one line per person, 0–10 on a single axis, time across.
+function buzzChartSVG(series) {
+  const W = 340, H = 220, L = 26, R = 66, T = 12, B = 28;
+  const all = series.flatMap((s) => s.pts.map((p) => p.t));
+  let t1 = Math.max(...all), t0 = Math.min(...all);
+  if (t1 - t0 < 3600e3) t0 = t1 - 3600e3;                 // show at least an hour
+  const pad = (t1 - t0) * 0.04; t0 -= pad; t1 += pad;
+  const x = (t) => L + (t - t0) / (t1 - t0) * (W - L - R), y = (v) => T + (10 - v) / 10 * (H - T - B);
+  const multiDay = new Date(t0).toDateString() !== new Date(t1).toDateString();
+  let g = "";
+  for (let v = 0; v <= 10; v += 2) g += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" class="grid"/><text x="${L - 6}" y="${y(v)}" class="ax" text-anchor="end" dominant-baseline="central">${v}</text>`;
+  for (let i = 0; i < 3; i++) { const t = t0 + (t1 - t0) * (0.12 + i * 0.38); g += `<text x="${x(t)}" y="${H - 8}" class="ax" text-anchor="middle">${fmtTime(t, multiDay)}</text>`; }
+  let lines = "", dots = "", labels = [];
+  for (const s of series) {
+    const d = s.pts.map((p, i) => `${i ? "L" : "M"}${x(p.t).toFixed(1)} ${y(p.v).toFixed(1)}`).join("");
+    lines += `<path d="${d}" class="ln" style="stroke:var(--s${s.slot})"/>`;
+    dots += s.pts.map((p) => `<circle cx="${x(p.t).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="4" class="dot" style="fill:var(--s${s.slot})"/>`).join("");
+    const last = s.pts[s.pts.length - 1];
+    labels.push({ y: y(last.v), x: x(last.t), name: s.m.name, slot: s.slot });
+  }
+  // Direct labels at each line's end, nudged apart so they never overlap.
+  labels.sort((a, b) => a.y - b.y);
+  for (let i = 1; i < labels.length; i++) if (labels[i].y - labels[i - 1].y < 13) labels[i].y = labels[i - 1].y + 13;
+  const dl = labels.map((l) => `<line x1="${l.x + 5}" x2="${W - R + 6}" y1="${l.y}" y2="${l.y}" class="lead"/><circle cx="${W - R + 10}" cy="${l.y}" r="3.5" style="fill:var(--s${l.slot})"/><text x="${W - R + 17}" y="${l.y}" class="dl" dominant-baseline="central">${esc(l.name.length > 8 ? l.name.slice(0, 7) + "…" : l.name)}</text>`).join("");
+  buzzSeries = { series, t0, t1, W, L, R, x };
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Family buzz levels over time">${g}${lines}${dots}${dl}<line class="xhair" x1="0" x2="0" y1="${T}" y2="${H - B}" visibility="hidden"/></svg>`;
+}
+
+// Crosshair + tooltip: snap to the nearest logged moment and list everyone's level then.
+function wireBuzzChart() {
+  const box = $("#buzzChart");
+  if (!box || !buzzSeries) return;
+  const svg = box.querySelector("svg"), tip = box.querySelector(".buzz-tip"), hair = svg.querySelector(".xhair");
+  const times = [...new Set(buzzSeries.series.flatMap((s) => s.pts.map((p) => p.t)))].sort((a, b) => a - b);
+  const show = (e) => {
+    const r = svg.getBoundingClientRect(), { W, L, R, t0, t1, x } = buzzSeries;
+    const vx = (e.clientX - r.left) / r.width * W;
+    const t = t0 + (vx - L) / (W - L - R) * (t1 - t0);
+    const snap = times.reduce((a, b) => (Math.abs(b - t) < Math.abs(a - t) ? b : a), times[0]);
+    hair.setAttribute("x1", x(snap)); hair.setAttribute("x2", x(snap)); hair.setAttribute("visibility", "visible");
+    tip.replaceChildren();
+    const head = document.createElement("div"); head.className = "tt-h"; head.textContent = fmtTime(snap, true); tip.append(head);
+    for (const s of buzzSeries.series) {
+      const at = [...s.pts].reverse().find((p) => p.t <= snap);
+      const row = document.createElement("div"); row.className = "tt-r";
+      const sw = document.createElement("i"); sw.style.background = `var(--s${s.slot})`;
+      const v = document.createElement("b"); v.textContent = at ? at.v : "–";
+      const n = document.createElement("span"); n.textContent = s.m.name;
+      row.append(sw, v, n); tip.append(row);
+    }
+    tip.hidden = false;
+    const px = x(snap) / W * r.width;
+    tip.style.left = `${Math.min(Math.max(px + 10, 0), r.width - tip.offsetWidth)}px`;
+  };
+  const hide = () => { tip.hidden = true; hair.setAttribute("visibility", "hidden"); };
+  svg.addEventListener("pointermove", show);
+  svg.addEventListener("pointerdown", show);
+  svg.addEventListener("pointerleave", hide);
+}
+
+async function logBuzz(level, drinkId) {
+  if (!state.me) return joinSheet();
+  const rec = myRec() || (D().members.push({ name: state.me.name, emoji: state.me.emoji, items: {} }), myRec());
+  (rec.buzz ||= []).push({ at: new Date().toISOString(), level, drinkId: drinkId || null });
+  render();
+  toast(`Buzz ${level}/10 — ${BUZZ[level]}`);
+  try { const out = await api("buzz", { method: "POST", body: { member: state.me.name, emoji: state.me.emoji, level, drinkId } }); Object.assign(rec, out.member); render(); }
+  catch (e) { toast(e.message); load({ quiet: true }); }
+}
+async function undoBuzz() {
+  const rec = myRec(); if (!rec?.buzz?.length) return;
+  rec.buzz.pop(); render();
+  try { const out = await api("buzz", { method: "POST", body: { member: state.me.name, undo: true } }); Object.assign(rec, out.member); render(); }
+  catch (e) { toast(e.message); load({ quiet: true }); }
+}
+function buzzSheet(d) {
+  const cur = nowBuzz(myRec());
+  openSheet(`<h2>How's the buzz?</h2>
+    <p class="muted">After the ${esc(d.name)}. Tap a number, or skip.</p>
+    ${buzzPicker(cur)}
+    <p class="buzz-hint muted" id="buzzHint">${cur != null ? `Last time: ${cur} — ${esc(BUZZ[cur])}` : "0 = stone-cold sober · 10 = tap out"}</p>
+    <button class="btn ghost block" data-close>Skip</button>`, (el) => {
+    el.querySelectorAll("[data-buzz]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); closeSheet(); logBuzz(+b.dataset.buzz, d.id); }));
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════════════
 //  SHEETS
 // ══════════════════════════════════════════════════════════════════════════
 function openSheet(html, onMount) { $("#sheetBody").innerHTML = html; $("#sheet").hidden = false; onMount?.($("#sheetBody")); }
@@ -1519,6 +1664,8 @@ document.addEventListener("click", (ev) => {
   }
   if (t.hasAttribute("data-closespot")) { state.sel = null; state.drawer = "peek"; render(); return; }
   if (t.hasAttribute("data-join")) return joinSheet();
+  if (t.dataset.buzz && !t.closest(".sheet")) return logBuzz(+t.dataset.buzz);
+  if (t.hasAttribute("data-buzz-undo")) return undoBuzz();
   if (t.hasAttribute("data-ftoggle")) return setFiltersOpen(!state.filtersOpen);
   if (t.hasAttribute("data-freset")) { Object.assign(state.filters, { group: "all", only: "all", fest: true, yr: true }); render(); return; }
   if (t.dataset.group) { state.filters.group = t.dataset.group; render(); return; }
@@ -1538,7 +1685,12 @@ document.addEventListener("click", (ev) => {
     const d = drinkById(id);
     const mine = myItem(id);
     if (t.dataset.rate) { const n = Number(t.dataset.rate); return checkin(id, { rating: mine.rating === n ? 0 : n }); }
-    if (t.dataset.act === "tried") return checkin(id, { tried: !mine.tried, ...(mine.tried ? { rating: 0 } : {}) });
+    if (t.dataset.act === "tried") {
+      const turningOn = !mine.tried;
+      checkin(id, { tried: turningOn, ...(turningOn ? {} : { rating: 0 }) });
+      if (turningOn && state.me && d && !NO_BUZZ_TYPES.has(d.type)) buzzSheet(d);
+      return;
+    }
     if (t.dataset.act === "want") return checkin(id, { want: !mine.want });
     if (t.dataset.act === "more") return state.me ? moreSheet(d) : joinSheet();
   }
