@@ -170,7 +170,7 @@ function passesFilters(d) {
   }
   return true;
 }
-const visibleDrinks = () => D().drinks.filter(passesFilters);
+const visibleDrinks = () => D().drinks.filter((d) => !d.hidden && passesFilters(d));
 
 // ── Festival theming & header ─────────────────────────────────────────────
 function applyTheme() {
@@ -536,6 +536,7 @@ function areaLabelsHTML(S) {
 function spots() {
   const by = {};
   for (const d of D().drinks) {
+    if (d.hidden) continue;
     const a = d.anchor && anchorOf(d.anchor) ? d.anchor : "showcase-plaza";
     (by[a] ||= { id: a, all: [], vis: [] }).all.push(d);
   }
@@ -968,7 +969,8 @@ function renderDrawer() {
       ${b.where ? `<p class="booth-where">${icon("pin")}${esc(b.where)}</p>` : ""}
       ${b.note ? `<div class="note">${esc(b.note)}</div>` : ""}
       <div class="drinks">${b.drinks.map((d) => drinkCard(d)).join("")}</div>`).join("")
-    || `<div class="empty"><div class="e">${icon("glass")}</div><p>${hidden ? "Nothing here matches your filters." : "No drinks listed here right now."}</p></div>`}`;
+    || `<div class="empty"><div class="e">${icon("glass")}</div><p>${hidden ? "Nothing here matches your filters." : "No drinks listed here right now."}</p></div>`}
+    <button class="btn block log-here" data-log-here>${icon("plus")}Had something not listed here?</button>`;
 }
 
 // ── Geolocation ───────────────────────────────────────────────────────────
@@ -1239,22 +1241,27 @@ const BUZZ = [
   "Stone-cold sober", "Just a sip", "Warming up", "Chatty", "Giggly", "Humming the Figment song",
   "Dancing in Germany", "Hugging a Cast Member", "Proposing to Spaceship Earth", "Seeing Figment for real", "Tap out — water & a bench",
 ];
-const NO_BUZZ_TYPES = new Set(["na", "coffee"]);
 const SERIES = 8; // categorical slots --s1…--s8 (validated palette), assigned by name so colors never shuffle
 const buzzLog = (m) => (Array.isArray(m?.buzz) ? m.buzz : []);
 const nowBuzz = (m) => { const l = buzzLog(m); return l.length ? l[l.length - 1].level : null; };
 const fmtTime = (ms, withDay) => new Date(ms).toLocaleString("en-US", withDay ? { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" } : { hour: "numeric", minute: "2-digit" });
 let buzzSeries = null;
 
-function buzzPeople() {
-  return [...members()].sort((a, b) => a.name.localeCompare(b.name)).map((m, i) => ({ m, slot: (i % SERIES) + 1, pts: buzzLog(m).map((b) => ({ t: Date.parse(b.at), v: b.level, drinkId: b.drinkId })) }));
+function buzzPeople(range = "visit") {
+  const today = new Date().toDateString();
+  return [...members()].sort((a, b) => a.name.localeCompare(b.name)).map((m, i) => ({
+    m, slot: (i % SERIES) + 1,
+    pts: buzzLog(m).map((b) => ({ t: Date.parse(b.at), v: b.level, drinkId: b.drinkId })).filter((p) => range !== "today" || new Date(p.t).toDateString() === today),
+  }));
 }
 
 function renderBuzz() {
-  const people = buzzPeople();
+  const range = state.buzzRange || "today";
+  const people = buzzPeople(range);
   const me = state.me ? people.find((p) => sameName(p.m.name, state.me.name)) : null;
   const mine = me ? nowBuzz(me.m) : null;
   const logged = people.filter((p) => p.pts.length);
+  const anyVisit = buzzPeople("visit").some((p) => p.pts.length);
   const peak = logged.flatMap((p) => p.pts.map((pt) => ({ p, ...pt }))).sort((a, b) => b.v - a.v || a.t - b.t)[0];
   return `
     <h2 class="section-title">Buzz meter</h2>
@@ -1270,14 +1277,15 @@ function renderBuzz() {
     </div></div>
 
     <div class="card"><h3>${icon("family")}Family buzz</h3><div class="rows">
+      <div class="seg buzz-range"><button data-brange="today" class="${range === "today" ? "on" : ""}">Today</button><button data-brange="visit" class="${range === "visit" ? "on" : ""}">Whole visit</button></div>
       ${logged.length ? `
         <div class="legend">${logged.map((p) => `<span class="lg"><i style="background:var(--s${p.slot})"></i>${esc(p.m.name)} <b>${nowBuzz(p.m)}</b></span>`).join("")}</div>
         <div class="buzz-chart" id="buzzChart">${buzzChartSVG(logged)}<div class="buzz-tip" hidden></div></div>
         ${peak ? `<p class="muted buzz-foot">Peak so far: <b>${esc(peak.p.m.name)}</b> hit ${peak.v}/10 at ${fmtTime(peak.t)}.</p>` : ""}`
-      : `<div class="empty"><div class="e">${icon("bolt")}</div><p>No buzz logged yet. Tap "Tried it" on a drink, or log yours above.</p></div>`}
+      : `<div class="empty"><div class="e">${icon("bolt")}</div><p>${range === "today" && anyVisit ? "Nothing logged today yet. Switch to Whole visit to see earlier days." : "No buzz logged yet. Every \"Tried it\" asks how you're feeling."}</p></div>`}
     </div></div>
 
-    ${logged.length ? `<div class="card"><h3>${icon("list")}Right now</h3><div class="rows">${people.map((p) => {
+    ${logged.length ? `<div class="card"><h3>${icon("list")}Right now</h3><div class="rows">${people.filter((p) => p.pts.length || buzzLog(p.m).length).map((p) => {
       const n = nowBuzz(p.m), pk = p.pts.reduce((a, b) => Math.max(a, b.v), -1);
       return `<div class="leader">${avatar(p.m.emoji)}<div class="who"><b>${esc(p.m.name)}</b><small>${n != null ? `${esc(BUZZ[n])} · peak ${pk}` : "not logged"}</small></div>
         <div class="score">${n ?? "–"}<small>of 10</small></div></div>`;
@@ -1337,7 +1345,9 @@ function wireBuzzChart() {
       const sw = document.createElement("i"); sw.style.background = `var(--s${s.slot})`;
       const v = document.createElement("b"); v.textContent = at ? at.v : "–";
       const n = document.createElement("span"); n.textContent = s.m.name;
-      row.append(sw, v, n); tip.append(row);
+      row.append(sw, v, n);
+      if (at && at.t === snap && at.drinkId) { const dn = drinkById(at.drinkId)?.name; if (dn) { const k = document.createElement("small"); k.textContent = `after ${dn}`; row.append(k); } }
+      tip.append(row);
     }
     tip.hidden = false;
     const px = x(snap) / W * r.width;
@@ -1364,22 +1374,26 @@ async function undoBuzz() {
   try { const out = await api("buzz", { method: "POST", body: { member: state.me.name, undo: true } }); Object.assign(rec, out.member); render(); }
   catch (e) { toast(e.message); load({ quiet: true }); }
 }
+// Logged after every "Tried it", so the chart shows each person's ups and downs through the day.
 function buzzSheet(d) {
   const cur = nowBuzz(myRec());
   openSheet(`<h2>How's the buzz?</h2>
-    <p class="muted">After the ${esc(d.name)}. Tap a number, or skip.</p>
+    <p class="muted">After the ${esc(d.name)}. One tap — it builds your line on the family buzz chart.</p>
     ${buzzPicker(cur)}
-    <p class="buzz-hint muted" id="buzzHint">${cur != null ? `Last time: ${cur} — ${esc(BUZZ[cur])}` : "0 = stone-cold sober · 10 = tap out"}</p>
-    <button class="btn ghost block" data-close>Skip</button>`, (el) => {
-    el.querySelectorAll("[data-buzz]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); closeSheet(); logBuzz(+b.dataset.buzz, d.id); }));
-  });
+    <p class="buzz-hint muted">0 = stone-cold sober · 10 = tap out</p>
+    ${cur != null ? `<button class="btn block" data-buzz-same>${icon("refresh")}Same as last time · ${cur} — ${esc(BUZZ[cur])}</button>` : ""}`, (el) => {
+    const pick = (n) => (e) => { e.stopPropagation(); closeSheet(); logBuzz(n, d.id); };
+    el.querySelectorAll("[data-buzz]").forEach((b) => b.addEventListener("click", pick(+b.dataset.buzz)));
+    $("[data-buzz-same]", el)?.addEventListener("click", pick(cur));
+  }, { sticky: true });
 }
 
 // ══════════════════════════════════════════════════════════════════════════
 //  SHEETS
 // ══════════════════════════════════════════════════════════════════════════
-function openSheet(html, onMount) { $("#sheetBody").innerHTML = html; $("#sheet").hidden = false; onMount?.($("#sheetBody")); }
-function closeSheet() { $("#sheet").hidden = true; $("#sheetBody").innerHTML = ""; }
+function openSheet(html, onMount, { sticky = false } = {}) { $("#sheetBody").innerHTML = html; $("#sheet").hidden = false; $("#sheet").dataset.sticky = sticky ? "1" : ""; onMount?.($("#sheetBody")); }
+function closeSheet() { $("#sheet").hidden = true; $("#sheet").dataset.sticky = ""; $("#sheetBody").innerHTML = ""; }
+const sheetIsSticky = () => $("#sheet").dataset.sticky === "1";
 function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast._t); toast._t = setTimeout(() => (t.hidden = true), 2600); }
 
 function joinSheet() {
@@ -1423,27 +1437,36 @@ function askForCode() {
   });
 }
 
-function addSheet() {
+// Add a drink the menu is missing. In "log" mode (from a pavilion) it's something you had —
+// e.g. at a restaurant — so it's marked tried and kept off the map unless you choose otherwise.
+function addSheet({ log = false } = {}) {
   if (!state.me) return joinSheet();
   const A = D().anchors;
+  const here = state.sel && A[state.sel] ? A[state.sel] : null;
   const opts = WALK.filter((id) => A[id]).map((id) => `<option value="${id}" ${id === state.sel ? "selected" : ""}>${esc(A[id].name)}</option>`).join("");
   const guessCountry = state.sel && A[state.sel]?.kind === "pavilion" ? (state.sel === "america" ? "usa" : state.sel) : "park";
   openSheet(`
-    <h2>Add a drink</h2>
-    <p class="muted">Spotted something that isn't listed? Add it and everyone sees it on the map.</p>
-    <label class="field"><span>Drink name *</span><input id="aName" maxlength="90" placeholder="e.g. Frozen Grey Goose Orange Slush" /></label>
-    <label class="field"><span>Where is it? (map spot)</span><select id="aAnchor">${opts}</select></label>
-    <label class="field"><span>Booth / bar name</span><input id="aBooth" maxlength="60" placeholder="e.g. Les Vins des Chefs de France" /></label>
+    <h2>${log ? "Log a drink" : "Add a drink"}</h2>
+    <p class="muted">${log ? `Had something that isn't on our list${here ? ` at ${esc(here.name)}` : ""} — a restaurant drink, a special? Log it and it counts toward your passport, the family tab and the buzz chart.` : "Spotted something that isn't listed? Add it and everyone sees it on the map."}</p>
+    <label class="field"><span>Drink name *</span><input id="aName" maxlength="90" placeholder="${log ? "e.g. House margarita" : "e.g. Frozen Grey Goose Orange Slush"}" /></label>
+    <label class="field"><span>Where? (map spot)</span><select id="aAnchor">${opts}</select></label>
+    <label class="field"><span>Restaurant / bar${log ? " (optional)" : ""}</span><input id="aBooth" maxlength="60" placeholder="e.g. ${log ? "San Angel Inn" : "Les Vins des Chefs de France"}" /></label>
     <label class="field"><span>Country</span><select id="aCountry">${D().countries.map((c) => `<option value="${c.id}" ${c.id === guessCountry ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select></label>
     <label class="field"><span>Type</span><select id="aType">${D().types.map((t) => `<option value="${t}">${TYPE_LABEL[t]}</option>`).join("")}</select></label>
     <label class="field"><span>Price</span><input id="aPrice" maxlength="30" placeholder="$14.00" /></label>
-    <label class="field"><span>What's in it?</span><textarea id="aDesc" rows="2" maxlength="240"></textarea></label>
+    ${log ? "" : `<label class="field"><span>What's in it?</span><textarea id="aDesc" rows="2" maxlength="240"></textarea></label>`}
     <label class="check-field"><input type="checkbox" id="aYr" /> <span>It's on the year-round menu (not just this festival)</span></label>
-    <button class="btn accent block" id="aGo">Add for everyone</button>`, (el) => {
+    <label class="check-field"><input type="checkbox" id="aShow" ${log ? "" : "checked"} /> <span>Show it on the map and menu for everyone</span></label>
+    <button class="btn accent block" id="aGo">${log ? `${icon("check")}Log it — I had this` : "Add for everyone"}</button>`, (el) => {
     $("#aGo", el).onclick = async () => {
-      const body = { member: state.me.name, name: $("#aName").value, anchor: $("#aAnchor").value, country: $("#aCountry").value, booth: $("#aBooth").value, type: $("#aType").value, price: $("#aPrice").value, desc: $("#aDesc").value, yearRound: $("#aYr").checked };
+      const body = { member: state.me.name, name: $("#aName").value, anchor: $("#aAnchor").value, country: $("#aCountry").value, booth: $("#aBooth").value || (log && here ? here.name : ""), type: $("#aType").value, price: $("#aPrice").value, desc: $("#aDesc")?.value || "", yearRound: $("#aYr").checked, hidden: !$("#aShow").checked };
       if (!body.name.trim()) return toast("Give it a name");
-      try { await api("drinks", { method: "POST", body }); closeSheet(); await load(); toast("Added for everyone"); } catch (e) { toast(e.message); }
+      try {
+        const out = await api("drinks", { method: "POST", body });
+        closeSheet(); await load();
+        if (log) { await checkin(out.drink.id, { tried: true }); buzzSheet(out.drink); }
+        else toast("Added for everyone");
+      } catch (e) { toast(e.message); }
     };
   });
 }
@@ -1652,7 +1675,7 @@ function jumpTo(anchor) {
 document.addEventListener("click", (ev) => {
   const t = ev.target.closest("button, [data-close]");
   if (!t) return;
-  if (t.matches("[data-close]")) return closeSheet();
+  if (t.matches("[data-close]")) { if (t.classList.contains("sheet-backdrop") && sheetIsSticky()) return; return closeSheet(); }
   if (t.closest("#map")) return; // map taps handled by pan/zoom
   if (t.dataset.tab) { state.tab = t.dataset.tab; ls.set(LS.tab, state.tab); render(); window.scrollTo({ top: 0 }); return; }
   if (t.dataset.tabjump) { state.tab = t.dataset.tabjump; render(); return; }
@@ -1664,6 +1687,8 @@ document.addEventListener("click", (ev) => {
   }
   if (t.hasAttribute("data-closespot")) { state.sel = null; state.drawer = "peek"; render(); return; }
   if (t.hasAttribute("data-join")) return joinSheet();
+  if (t.hasAttribute("data-log-here")) return addSheet({ log: true });
+  if (t.dataset.brange) { state.buzzRange = t.dataset.brange; render(); return; }
   if (t.dataset.buzz && !t.closest(".sheet")) return logBuzz(+t.dataset.buzz);
   if (t.hasAttribute("data-buzz-undo")) return undoBuzz();
   if (t.hasAttribute("data-ftoggle")) return setFiltersOpen(!state.filtersOpen);
@@ -1688,7 +1713,7 @@ document.addEventListener("click", (ev) => {
     if (t.dataset.act === "tried") {
       const turningOn = !mine.tried;
       checkin(id, { tried: turningOn, ...(turningOn ? {} : { rating: 0 }) });
-      if (turningOn && state.me && d && !NO_BUZZ_TYPES.has(d.type)) buzzSheet(d);
+      if (turningOn && state.me && d) buzzSheet(d);
       return;
     }
     if (t.dataset.act === "want") return checkin(id, { want: !mine.want });
@@ -1705,7 +1730,7 @@ document.addEventListener("input", (ev) => {
 });
 document.addEventListener("toggle", (ev) => { if (ev.target.classList?.contains("tab-card")) ls.set("sips.tabOpen", ev.target.open); }, true);
 document.addEventListener("change", (ev) => { if (ev.target.id === "sort") { state.filters.sort = ev.target.value; render(); } });
-document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && !$("#sheet").hidden) closeSheet(); });
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && !$("#sheet").hidden && !sheetIsSticky()) closeSheet(); });
 
 $("#drawerGrip").onclick = () => { state.drawer = state.drawer === "full" ? (state.sel ? "half" : "peek") : state.drawer === "half" ? "full" : "half"; render(); };
 $("#meBtn").onclick = joinSheet;

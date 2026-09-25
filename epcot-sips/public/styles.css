@@ -421,6 +421,9 @@ select.sort { border: 1px solid var(--line-2); background: var(--surface); borde
 .tt-r { display: flex; align-items: center; gap: 6px; }
 .tt-r i { width: 10px; height: 3px; border-radius: 2px; }
 .tt-r b { font-family: var(--display); font-size: .95rem; min-width: 16px; }
+.buzz-range { margin: 12px 0 2px; }
+.tt-r small { color: var(--chrome-ink-2); font-size: .72rem; margin-left: 2px; }
+.log-here { margin-top: 16px; border-style: dashed; }
 .buzz-foot { font-size: .82rem; margin: 8px 0 12px; }
 .feed-item { display: flex; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); font-size: .88rem; align-items: flex-start; }
 .feed-item:first-child { border-top: 0; }

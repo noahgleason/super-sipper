@@ -181,11 +181,12 @@ export default async (req) => {
         id, name, country,
         anchor: anchor || { usa: "america" }[country] || (ANCHORS[country] ? country : "showcase-plaza"),
         type: TYPES.includes(body.type) ? body.type : "cocktail",
-        price: clean(body.price, 30) || null,
+        price: (() => { const p = clean(body.price, 30); return p ? (/^\d/.test(p) ? `$${p}` : p) : null; })(),
         desc: clean(body.desc, 240),
         booth: clean(body.booth, 60) || "Found by the family",
         where: "", opens: null, closes: null, yearRound: !!body.yearRound, note: "",
         source: "family", addedBy: clean(body.member, 24), addedAt: new Date().toISOString(),
+        hidden: !!body.hidden, // logged for the family (tried, tab, stamps) but kept off the map
         festivalId: body.yearRound ? "yr" : festivalId(fest.festival),
       };
       await s.setJSON(`custom/${id}`, drink);
