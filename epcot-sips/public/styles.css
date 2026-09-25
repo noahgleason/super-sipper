@@ -391,18 +391,12 @@ select.sort { border: 1px solid var(--line-2); background: var(--surface); borde
 .stat b { display: block; font-family: var(--display); font-weight: 800; font-size: 1.9rem; line-height: 1; }
 .stat span { font-family: var(--display); font-weight: 700; font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--chrome-ink-2); }
 .passport .meta { row-gap: 10px; }
-.buzz-me .rows { padding-top: 12px; padding-bottom: 14px; }
-.buzz-now { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
-.buzz-now > b { font-family: var(--display); font-weight: 800; font-size: 3.4rem; line-height: .9; min-width: 52px; }
-.buzz-now span { font-weight: 600; font-size: 1rem; }
-.buzz-now small { display: block; font-family: var(--display); font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); font-weight: 700; }
 .buzz-pick { display: grid; grid-template-columns: repeat(11, 1fr); gap: 3px; margin: 6px 0 10px; }
 .buzz-pick button { aspect-ratio: 1 / 1.25; border: 1px solid var(--line-2); border-radius: var(--r); font-family: var(--display); font-weight: 800; font-size: 1.05rem; padding: 0;
   background: color-mix(in srgb, var(--accent) calc(var(--lvl) * 85%), var(--surface)); color: var(--ink); }
 .buzz-pick button:nth-child(n+8) { color: #fff; }
 .buzz-pick button.on { outline: 2.5px solid var(--ink); outline-offset: 1px; }
 .buzz-hint { font-size: .84rem; text-align: center; }
-.note.water { display: flex; gap: 8px; align-items: flex-start; border-left-color: #2f7bf5; margin-top: 10px; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 12px 0 4px; font-size: .84rem; }
 .lg { display: inline-flex; align-items: center; gap: 6px; }
 .lg i { width: 12px; height: 4px; border-radius: 2px; display: inline-block; }
@@ -426,7 +420,6 @@ select.sort { border: 1px solid var(--line-2); background: var(--surface); borde
 .chip.buzz-chip { cursor: pointer; background: color-mix(in srgb, var(--accent) 14%, var(--surface-2)); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); color: var(--ink); }
 .chip.buzz-chip .i { color: var(--accent); }
 .chip.buzz-chip.todo { border-style: dashed; background: none; }
-.buzz-now em { display: block; font-style: normal; font-size: .82rem; color: var(--ink-3); font-weight: 500; }
 .buzz-range { margin: 12px 0 2px; }
 .tt-r small { color: var(--chrome-ink-2); font-size: .72rem; margin-left: 2px; }
 .log-here { margin-top: 16px; border-style: dashed; }

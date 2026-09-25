@@ -1264,26 +1264,14 @@ function buzzPeople(range = "visit") {
 function renderBuzz() {
   const range = state.buzzRange || "today";
   const people = buzzPeople(range);
-  const me = state.me ? people.find((p) => sameName(p.m.name, state.me.name)) : null;
-  const mine = me ? nowBuzz(me.m) : null;
   const logged = people.filter((p) => p.pts.length);
   const anyVisit = buzzPeople("visit").some((p) => p.pts.length);
   const peak = logged.flatMap((p) => p.pts.map((pt) => ({ p, ...pt }))).sort((a, b) => b.v - a.v || a.t - b.t)[0];
   return `
-    <h2 class="section-title">Buzz meter</h2>
-    <p class="section-sub">Just for fun. 0 = stone-cold sober, 10 = time for water and a bench.</p>
+    <h2 class="section-title">Family buzz</h2>
+    <p class="section-sub">Built from the buzz you rate after each "Tried it". 0 = stone-cold sober, 10 = time for water and a bench.</p>
 
-    <div class="card buzz-me"><h3>${icon("bolt")}Your buzz</h3><div class="rows">
-      ${state.me ? (() => {
-        const last = buzzLog(myRec()).slice(-1)[0], dn = last && drinkById(last.drinkId)?.name;
-        return `<div class="buzz-now"><b>${mine ?? "–"}</b><span><small>out of 10</small>${mine != null ? esc(BUZZ[mine]) : "No drinks rated yet"}${dn ? `<em>after ${esc(dn)}</em>` : ""}</span></div>
-          <p class="muted" style="font-size:.84rem;margin:0">Buzz is rated per drink — tap "Tried it" on a drink and you'll be asked for stars and buzz.</p>
-          ${mine != null && mine >= 7 ? `<div class="note water">${icon("info")}Water break? Any quick-service counter will give you a free cup of ice water.</div>` : ""}`;
-      })()
-      : `<p class="muted">Pick your name first.</p><button class="btn accent" data-join>Join the family</button>`}
-    </div></div>
-
-    <div class="card"><h3>${icon("family")}Family buzz</h3><div class="rows">
+    <div class="card"><h3>${icon("family")}Buzz over time</h3><div class="rows">
       <div class="seg buzz-range"><button data-brange="today" class="${range === "today" ? "on" : ""}">Today</button><button data-brange="visit" class="${range === "visit" ? "on" : ""}">Whole visit</button></div>
       ${logged.length ? `
         <div class="legend">${logged.map((p) => `<span class="lg"><i style="background:var(--s${p.slot})"></i>${esc(p.m.name)} <b>${nowBuzz(p.m)}</b></span>`).join("")}</div>
@@ -1398,7 +1386,7 @@ function rateSheet(d, { stars } = {}) {
       if (buzz == null) return toast("Pick a buzz level");
       closeSheet();
       checkin(d.id, { tried: true, rating, buzz });
-      toast(`Saved${rating ? ` · ${rating}★` : ""} · buzz ${buzz}/10`);
+      toast(`Saved${rating ? ` · ${rating}★` : ""} · buzz ${buzz}/10${buzz >= 7 ? " — grab a free ice water at any quick-service counter" : ""}`);
     });
   }, { sticky: true });
 }
