@@ -1016,6 +1016,8 @@ function drinkCard(d, { showWhere = false } = {}) {
   if (d.status?.soldOut) chips.push(`<span class="chip warn">${icon("ban")}Sold out today · ${esc(d.status.by || "family")}</span>`);
   if (d.source === "family") chips.push(`<span class="chip fam">${icon("user")}Found by ${esc(d.addedBy || "family")}</span>`);
   if (avg) chips.push(`<span class="chip star">${icon("star")}${avg.toFixed(1)} family</span>`);
+  if (mine.tried && Number.isFinite(mine.buzz)) chips.push(`<button class="chip buzz-chip" data-act="rate" aria-label="Change stars and buzz">${icon("bolt")}Buzz ${mine.buzz}/10</button>`);
+  else if (mine.tried) chips.push(`<button class="chip buzz-chip todo" data-act="rate">${icon("bolt")}Rate buzz</button>`);
   const stars = [1, 2, 3, 4, 5].map((n) => `<button data-rate="${n}" aria-label="Rate ${n}" class="${(mine.rating || 0) >= n ? "lit" : ""}">${icon("star")}</button>`).join("");
   return `<article class="drink ${mine.tried ? "tried" : ""} ${d.status?.soldOut ? "soldout" : ""}" data-id="${esc(d.id)}">
     <div class="drink-top">
@@ -1242,7 +1244,11 @@ const BUZZ = [
   "Dancing in Germany", "Hugging a Cast Member", "Proposing to Spaceship Earth", "Seeing Figment for real", "Tap out — water & a bench",
 ];
 const SERIES = 8; // categorical slots --s1…--s8 (validated palette), assigned by name so colors never shuffle
-const buzzLog = (m) => (Array.isArray(m?.buzz) ? m.buzz : []);
+// Each tried drink carries its own buzz rating; a person's line is those, in the order they were rated.
+const buzzLog = (m) => Object.entries(m?.items || {})
+  .filter(([, it]) => it.tried && Number.isFinite(it.buzz))
+  .map(([drinkId, it]) => ({ at: it.buzzAt || it.at, level: it.buzz, drinkId }))
+  .sort((a, b) => String(a.at).localeCompare(String(b.at)));
 const nowBuzz = (m) => { const l = buzzLog(m); return l.length ? l[l.length - 1].level : null; };
 const fmtTime = (ms, withDay) => new Date(ms).toLocaleString("en-US", withDay ? { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" } : { hour: "numeric", minute: "2-digit" });
 let buzzSeries = null;
@@ -1268,11 +1274,12 @@ function renderBuzz() {
     <p class="section-sub">Just for fun. 0 = stone-cold sober, 10 = time for water and a bench.</p>
 
     <div class="card buzz-me"><h3>${icon("bolt")}Your buzz</h3><div class="rows">
-      ${state.me ? `
-        <div class="buzz-now"><b>${mine ?? "–"}</b><span><small>out of 10</small>${mine != null ? esc(BUZZ[mine]) : "Not logged yet"}</span></div>
-        ${buzzPicker(mine)}
-        ${me?.pts.length ? `<button class="linkbtn" data-buzz-undo>${icon("close")}Undo my last entry</button>` : ""}
-        ${mine != null && mine >= 7 ? `<div class="note water">${icon("info")}Water break? Any quick-service counter will give you a free cup of ice water.</div>` : ""}`
+      ${state.me ? (() => {
+        const last = buzzLog(myRec()).slice(-1)[0], dn = last && drinkById(last.drinkId)?.name;
+        return `<div class="buzz-now"><b>${mine ?? "–"}</b><span><small>out of 10</small>${mine != null ? esc(BUZZ[mine]) : "No drinks rated yet"}${dn ? `<em>after ${esc(dn)}</em>` : ""}</span></div>
+          <p class="muted" style="font-size:.84rem;margin:0">Buzz is rated per drink — tap "Tried it" on a drink and you'll be asked for stars and buzz.</p>
+          ${mine != null && mine >= 7 ? `<div class="note water">${icon("info")}Water break? Any quick-service counter will give you a free cup of ice water.</div>` : ""}`;
+      })()
       : `<p class="muted">Pick your name first.</p><button class="btn accent" data-join>Join the family</button>`}
     </div></div>
 
@@ -1282,7 +1289,7 @@ function renderBuzz() {
         <div class="legend">${logged.map((p) => `<span class="lg"><i style="background:var(--s${p.slot})"></i>${esc(p.m.name)} <b>${nowBuzz(p.m)}</b></span>`).join("")}</div>
         <div class="buzz-chart" id="buzzChart">${buzzChartSVG(logged)}<div class="buzz-tip" hidden></div></div>
         ${peak ? `<p class="muted buzz-foot">Peak so far: <b>${esc(peak.p.m.name)}</b> hit ${peak.v}/10 at ${fmtTime(peak.t)}.</p>` : ""}`
-      : `<div class="empty"><div class="e">${icon("bolt")}</div><p>${range === "today" && anyVisit ? "Nothing logged today yet. Switch to Whole visit to see earlier days." : "No buzz logged yet. Every \"Tried it\" asks how you're feeling."}</p></div>`}
+      : `<div class="empty"><div class="e">${icon("bolt")}</div><p>${range === "today" && anyVisit ? "Nothing logged today yet. Switch to Whole visit to see earlier days." : "No buzz yet. Every \"Tried it\" asks for stars and buzz."}</p></div>`}
     </div></div>
 
     ${logged.length ? `<div class="card"><h3>${icon("list")}Right now</h3><div class="rows">${people.filter((p) => p.pts.length || buzzLog(p.m).length).map((p) => {
@@ -1359,32 +1366,40 @@ function wireBuzzChart() {
   svg.addEventListener("pointerleave", hide);
 }
 
-async function logBuzz(level, drinkId) {
-  if (!state.me) return joinSheet();
-  const rec = myRec() || (D().members.push({ name: state.me.name, emoji: state.me.emoji, items: {} }), myRec());
-  (rec.buzz ||= []).push({ at: new Date().toISOString(), level, drinkId: drinkId || null });
-  render();
-  toast(`Buzz ${level}/10 — ${BUZZ[level]}`);
-  try { const out = await api("buzz", { method: "POST", body: { member: state.me.name, emoji: state.me.emoji, level, drinkId } }); Object.assign(rec, out.member); render(); }
-  catch (e) { toast(e.message); load({ quiet: true }); }
-}
-async function undoBuzz() {
-  const rec = myRec(); if (!rec?.buzz?.length) return;
-  rec.buzz.pop(); render();
-  try { const out = await api("buzz", { method: "POST", body: { member: state.me.name, undo: true } }); Object.assign(rec, out.member); render(); }
-  catch (e) { toast(e.message); load({ quiet: true }); }
-}
-// Logged after every "Tried it", so the chart shows each person's ups and downs through the day.
-function buzzSheet(d) {
-  const cur = nowBuzz(myRec());
-  openSheet(`<h2>How's the buzz?</h2>
-    <p class="muted">After the ${esc(d.name)}. One tap — it builds your line on the family buzz chart.</p>
-    ${buzzPicker(cur)}
-    <p class="buzz-hint muted">0 = stone-cold sober · 10 = tap out</p>
-    ${cur != null ? `<button class="btn block" data-buzz-same>${icon("refresh")}Same as last time · ${cur} — ${esc(BUZZ[cur])}</button>` : ""}`, (el) => {
-    const pick = (n) => (e) => { e.stopPropagation(); closeSheet(); logBuzz(n, d.id); };
-    el.querySelectorAll("[data-buzz]").forEach((b) => b.addEventListener("click", pick(+b.dataset.buzz)));
-    $("[data-buzz-same]", el)?.addEventListener("click", pick(cur));
+// "How was it?" — stars + buzz for one drink, right after "Tried it" (or the first star tap).
+function rateSheet(d, { stars } = {}) {
+  const mine = myItem(d.id);
+  let rating = stars ?? mine.rating ?? 0, buzz = Number.isFinite(mine.buzz) ? mine.buzz : null;
+  const prev = buzzLog(myRec()).filter((b) => b.drinkId !== d.id).slice(-1)[0];
+  const starBtns = () => [1, 2, 3, 4, 5].map((n) => `<button data-rs="${n}" aria-label="${n} star${n > 1 ? "s" : ""}" class="${rating >= n ? "lit" : ""}">${icon("star")}</button>`).join("");
+  openSheet(`<h2>How was it?</h2>
+    <p class="muted">${esc(d.name)}</p>
+    <div class="field"><span>Your rating</span><div class="stars big" id="rsStars">${starBtns()}</div></div>
+    <div class="field"><span>Buzz after this drink</span>${buzzPicker(buzz)}
+      <p class="buzz-hint muted" id="rsHint">${buzz != null ? `${buzz} — ${esc(BUZZ[buzz])}` : "0 = stone-cold sober · 10 = tap out"}</p>
+      ${prev ? `<button class="btn block" data-rs-same>${icon("refresh")}Same as last drink · ${prev.level}</button>` : ""}</div>
+    <button class="btn accent block" id="rsSave" ${buzz == null ? "disabled" : ""}>${icon("check")}Save</button>`, (el) => {
+    const setBuzz = (n) => {
+      buzz = n;
+      el.querySelectorAll("[data-buzz]").forEach((b) => b.classList.toggle("on", +b.dataset.buzz === n));
+      $("#rsHint", el).textContent = `${n} — ${BUZZ[n]}`;
+      $("#rsSave", el).disabled = false;
+    };
+    el.querySelectorAll("[data-buzz]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); setBuzz(+b.dataset.buzz); }));
+    $("[data-rs-same]", el)?.addEventListener("click", (e) => { e.stopPropagation(); setBuzz(prev.level); });
+    $("#rsStars", el).addEventListener("click", (e) => {
+      const b = e.target.closest("[data-rs]"); if (!b) return;
+      e.stopPropagation();
+      rating = rating === +b.dataset.rs ? 0 : +b.dataset.rs;
+      $("#rsStars", el).innerHTML = starBtns();
+    });
+    $("#rsSave", el).addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (buzz == null) return toast("Pick a buzz level");
+      closeSheet();
+      checkin(d.id, { tried: true, rating, buzz });
+      toast(`Saved${rating ? ` · ${rating}★` : ""} · buzz ${buzz}/10`);
+    });
   }, { sticky: true });
 }
 
@@ -1464,7 +1479,7 @@ function addSheet({ log = false } = {}) {
       try {
         const out = await api("drinks", { method: "POST", body });
         closeSheet(); await load();
-        if (log) { await checkin(out.drink.id, { tried: true }); buzzSheet(out.drink); }
+        if (log) { await checkin(out.drink.id, { tried: true }); rateSheet(out.drink); }
         else toast("Added for everyone");
       } catch (e) { toast(e.message); }
     };
@@ -1689,8 +1704,6 @@ document.addEventListener("click", (ev) => {
   if (t.hasAttribute("data-join")) return joinSheet();
   if (t.hasAttribute("data-log-here")) return addSheet({ log: true });
   if (t.dataset.brange) { state.buzzRange = t.dataset.brange; render(); return; }
-  if (t.dataset.buzz && !t.closest(".sheet")) return logBuzz(+t.dataset.buzz);
-  if (t.hasAttribute("data-buzz-undo")) return undoBuzz();
   if (t.hasAttribute("data-ftoggle")) return setFiltersOpen(!state.filtersOpen);
   if (t.hasAttribute("data-freset")) { Object.assign(state.filters, { group: "all", only: "all", fest: true, yr: true }); render(); return; }
   if (t.dataset.group) { state.filters.group = t.dataset.group; render(); return; }
@@ -1709,12 +1722,18 @@ document.addEventListener("click", (ev) => {
     const id = card.dataset.id;
     const d = drinkById(id);
     const mine = myItem(id);
-    if (t.dataset.rate) { const n = Number(t.dataset.rate); return checkin(id, { rating: mine.rating === n ? 0 : n }); }
+    if (t.dataset.rate) {
+      const n = Number(t.dataset.rate);
+      // First rating (or no buzz yet) → ask for buzz too; otherwise just update the stars.
+      if (!mine.tried || !Number.isFinite(mine.buzz)) return d && state.me ? rateSheet(d, { stars: n }) : joinSheet();
+      return checkin(id, { rating: mine.rating === n ? 0 : n });
+    }
+    if (t.dataset.act === "rate") return d && rateSheet(d);
     if (t.dataset.act === "tried") {
-      const turningOn = !mine.tried;
-      checkin(id, { tried: turningOn, ...(turningOn ? {} : { rating: 0 }) });
-      if (turningOn && state.me && d) buzzSheet(d);
-      return;
+      if (!state.me) return joinSheet();
+      if (mine.tried) return checkin(id, { tried: false, rating: 0, buzz: null });
+      checkin(id, { tried: true });
+      return d && rateSheet(d);
     }
     if (t.dataset.act === "want") return checkin(id, { want: !mine.want });
     if (t.dataset.act === "more") return state.me ? moreSheet(d) : joinSheet();

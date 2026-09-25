@@ -421,6 +421,12 @@ select.sort { border: 1px solid var(--line-2); background: var(--surface); borde
 .tt-r { display: flex; align-items: center; gap: 6px; }
 .tt-r i { width: 10px; height: 3px; border-radius: 2px; }
 .tt-r b { font-family: var(--display); font-size: .95rem; min-width: 16px; }
+.stars.big button { min-width: 44px; min-height: 44px; }
+.stars.big button .i { width: 30px; height: 30px; }
+.chip.buzz-chip { cursor: pointer; background: color-mix(in srgb, var(--accent) 14%, var(--surface-2)); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); color: var(--ink); }
+.chip.buzz-chip .i { color: var(--accent); }
+.chip.buzz-chip.todo { border-style: dashed; background: none; }
+.buzz-now em { display: block; font-style: normal; font-size: .82rem; color: var(--ink-3); font-weight: 500; }
 .buzz-range { margin: 12px 0 2px; }
 .tt-r small { color: var(--chrome-ink-2); font-size: .72rem; margin-left: 2px; }
 .log-here { margin-top: 16px; border-style: dashed; }

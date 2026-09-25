@@ -10,7 +10,6 @@
 //   POST   /api/verify           check the family code
 //   POST   /api/unlock           check the refresh password → the claude.ai prompt for manual updates
 //   POST   /api/import           preview (dryRun) or save a menu pasted back from claude.ai
-//   POST   /api/buzz             log how buzzed you feel (0–10), or {undo:true} to remove your last entry
 //   POST   /api/tab              set how many of a drink the family bought (per size) this visit
 //   POST   /api/visit/new        archive this visit (tried drinks, ratings, top-3 favorites), then start fresh
 //
@@ -151,6 +150,11 @@ export default async (req) => {
       if ("want" in body) next.want = !!body.want;
       if ("rating" in body) next.rating = Math.max(0, Math.min(5, Number(body.rating) || 0));
       if ("note" in body) next.note = clean(body.note, 280);
+      // Buzz is rated per drink (0–10), right after "Tried it" and the stars.
+      if ("buzz" in body) {
+        if (body.buzz === null) { delete next.buzz; delete next.buzzAt; }
+        else { next.buzz = Math.max(0, Math.min(10, Math.round(Number(body.buzz) || 0))); next.buzzAt = new Date().toISOString(); }
+      }
       if (next.rating > 0) next.tried = true;
       // A snapshot keeps your passport readable after the festival (and its menu) moves on.
       if (body.snapshot && typeof body.snapshot === "object") {
@@ -247,20 +251,6 @@ export default async (req) => {
       return json({ ok: true, saved: true, preview });
     }
 
-    if (method === "POST" && path === "buzz") {
-      const name = clean(body.member, 24);
-      if (!name) return json({ error: "member is required" }, 400);
-      const key = memberKey(name);
-      const rec = (await s.get(key, { type: "json" })) || { name, emoji: clean(body.emoji, 8) || "🥤", items: {} };
-      const log = Array.isArray(rec.buzz) ? rec.buzz : [];
-      if (body.undo) log.pop();
-      else log.push({ at: new Date().toISOString(), level: Math.max(0, Math.min(10, Math.round(Number(body.level) || 0))), drinkId: clean(body.drinkId, 200) || null });
-      rec.buzz = log.slice(-300);
-      rec.updated = new Date().toISOString();
-      await s.setJSON(key, rec);
-      return json({ ok: true, member: rec });
-    }
-
     // Family purchases are separate from "tried it": several people can share one drink.
     if (method === "POST" && path === "tab") {
       const drinkId = clean(body.drinkId, 200);
@@ -283,10 +273,11 @@ export default async (req) => {
           type: d?.type || sn.type || "cocktail", country: d?.country || sn.country || "park",
           festival: d ? (d.yearRound ? "Year-round" : festName) : sn.festival || "",
           rating: it.rating || 0, note: it.note || "", at: it.at || null,
+          buzz: Number.isFinite(it.buzz) ? it.buzz : null, buzzAt: it.buzzAt || null,
         };
       };
       const archived = st.members.map((m) => ({
-        name: m.name, emoji: m.emoji || "", buzz: Array.isArray(m.buzz) ? m.buzz : [],
+        name: m.name, emoji: m.emoji || "",
         tried: Object.entries(m.items || {}).filter(([, it]) => it.tried).map(([id, it]) => resolve(id, it)),
       }));
       const triedCount = archived.reduce((n, m) => n + m.tried.length, 0);
@@ -326,7 +317,8 @@ export default async (req) => {
       for (const m of st.members) {
         const keep = {};
         for (const [did, it] of Object.entries(m.items || {})) if (it.want && !it.tried) keep[did] = { want: true, ...(it.snap ? { snap: it.snap } : {}), at: it.at };
-        await s.setJSON(memberKey(m.name), { ...m, items: keep, buzz: [], updated: now });
+        const { buzz: _old, ...rest } = m;   // drop the old standalone buzz log if present
+        await s.setJSON(memberKey(m.name), { ...rest, items: keep, updated: now });
       }
       for (const did of Object.keys(st.tab || {})) await s.delete(`tab/${encodeURIComponent(did)}`);
       await s.setJSON("config/visit", { startedAt: now });
