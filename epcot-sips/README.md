@@ -14,7 +14,7 @@ A phone app for the whole family, built around live maps of the Walt Disney Worl
   - **Filters:** a collapsible panel. Turn the festival and year-round drinks on or off. Filter by cocktails, frozen, beer, wine, kid-friendly, coffee, open now, new this week, haven't tried, or your wishlist.
 - **List view.** Shows the same drinks in walking order around the park. You can also sort by closest to you, cheapest, or family favorites.
 - **Family.** Each person picks their name on their own phone and checks in drinks (tried it, a 1–5 ★ rating, a ♥ wishlist, tasting notes). The Family tab has a leaderboard, favorites, a most-wanted list and a live feed of check-ins.
-- **Passport.** A stamp for each park you've sipped in, World Showcase country stamps, and every drink you've tried, grouped by festival or park, so what you had in September is still there in January.
+- **Passport.** A stamp for each park you've sipped in, and a stamp for every World Showcase and festival country. Country stamps only come from EPCOT drinks (a Mexican beer at Magic Kingdom doesn't stamp Mexico). Every drink you've tried is listed, grouped by festival or park, so what you had in September is still there in January. Stamp every country and the screen fills with fireworks (once per person per festival; replay them from the passport).
 - **Home Screen app.** You can add it to your phone's Home Screen, and it still opens when park Wi-Fi is spotty.
 
 ## How it stays current

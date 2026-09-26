@@ -174,7 +174,16 @@ const sameName = (a, b) => String(a || "").toLowerCase() === String(b || "").toL
 // Everything a person tried on earlier (archived) visits.
 const pastTriedFor = (name) => visits().flatMap((v) => (v.members.find((m) => sameName(m.name, name))?.tried || []).map((t) => ({ ...t, visit: v })));
 const fmtDay = (iso) => (iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "");
-const stampsFor = (rec) => new Set(memberItems(rec).filter((x) => x.it.tried && x.country !== "park").map((x) => x.country));
+// Country stamps only come from EPCOT drinks: a Mexican beer at Magic Kingdom doesn't stamp Mexico.
+const stampsFor = (rec) => new Set(memberItems(rec).filter((x) => x.it.tried && x.park === "epcot" && x.country !== "park").map((x) => x.country));
+// Park stamps: one per park you've tried something in.
+const parkStampsFor = (rec) => new Set(memberItems(rec).filter((x) => x.it.tried).map((x) => x.park));
+// The passport is finished when every World Showcase (and festival) country with drinks on the menu is stamped.
+function passportStatus(rec) {
+  const got = stampsFor(rec);
+  const cs = D().countries.filter((c) => c.id !== "park" && (c.pavilion || got.has(c.id) || D().drinks.some((d) => parkOf(d) === "epcot" && d.country === c.id)));
+  return { got, cs, done: cs.length > 0 && cs.every((c) => got.has(c.id)) };
+}
 
 function passesFilters(d) {
   const f = state.filters;
@@ -262,6 +271,7 @@ function render() {
   }
   applyTheme();
   document.body.dataset.tab = state.tab;
+  document.body.dataset.park = state.park;
   document.body.dataset.drawer = state.drawer;
   renderHeader();
   // The map for the current park is always kept built (the list and "closest to me" use it too).
@@ -1289,25 +1299,26 @@ function renderPassport() {
   const items = memberItems(rec);
   const tried = items.filter((x) => x.it.tried);
   const want = items.filter((x) => x.it.want && !x.it.tried && x.current);
-  const got = stampsFor(rec);
-  const gotParks = new Set(tried.map((x) => x.park));
+  const { got, cs, done } = passportStatus(rec);
+  const gotParks = parkStampsFor(rec);
   const ps = parkList();
-  const cs = D().countries.filter((c) => c.pavilion || got.has(c.id) || D().drinks.some((d) => d.country === c.id)).filter((c) => c.id !== "park");
   const byFest = {};
   for (const x of tried) (byFest[x.festival] ||= []).push(x);
   const past = pastTriedFor(state.me.name);
   const byVisit = {};
   for (const t of past) (byVisit[t.visit.id] ||= { v: t.visit, xs: [] }).xs.push(t);
-
+  // Finished on another phone (or before this update)? Celebrate the first time it's opened here.
+  if (done && !ls.get(fireworksKey())) setTimeout(() => celebratePassport(), 400);
 
   return `
-    <div class="passport">
+    <div class="passport ${done ? "complete" : ""}">
       <span class="seal">${icon("globe")}</span>
       <div class="passport-head">${avatar(state.me.emoji)}<div><div class="eyebrow">Park Passport</div><h2>${esc(state.me.name)}</h2></div></div>
-      <div class="meta"><span><b>${tried.length}</b>tried this visit</span>${past.length ? `<span><b>${tried.length + past.length}</b>all-time</span>` : ""}<span><b>${got.size + gotParks.size}/${cs.length + ps.length}</b>stamps</span></div>
+      <div class="meta"><span><b>${tried.length}</b>tried this visit</span>${past.length ? `<span><b>${tried.length + past.length}</b>all-time</span>` : ""}<span><b>${got.size}/${cs.length}</b>countries</span><span><b>${gotParks.size}/${ps.length}</b>parks</span></div>
+      ${done ? `<div class="pp-done">${icon("sparkle")}<div><b>Passport complete!</b><small>Every World Showcase country stamped.</small></div><button class="btn" data-fireworks>${icon("sparkle")}Fireworks</button></div>` : ""}
       <p class="stamp-label">Parks</p>
       <div class="stamps">${ps.map((p, i) => stampSVG(p, gotParks.has(p.id), i + 2, { park: true })).join("")}</div>
-      <p class="stamp-label">World Showcase</p>
+      <p class="stamp-label">World Showcase <small>EPCOT drinks only</small></p>
       <div class="stamps">${cs.map((c, i) => stampSVG(c, got.has(c.id), i)).join("")}</div>
     </div>
     ${want.length ? `<p class="group-label">${icon("heart")}Want to try (${want.length})</p><div class="drinks">${want.map((x) => drinkCard(x.d, { showWhere: true })).join("")}</div>` : ""}
@@ -1326,6 +1337,77 @@ function renderPassport() {
           <p class="where">${flag(t.country)}${esc(t.booth)} · ${fmtDay(t.at || v.endedAt)}</p>
           ${t.rating ? `<div class="chips"><span class="chip star">${icon("star")}${t.rating}</span></div>` : ""}
           ${t.note ? `<p class="my-note">“${esc(t.note)}”</p>` : ""}</article>`).join("")}</div>`).join("")}`;
+}
+
+// ── Fireworks (a finished passport) ───────────────────────────────────────
+const fireworksKey = () => `sips.fireworks.${(state.me?.name || "").toLowerCase()}.${D()?.festivalId || "yr"}`;
+function celebratePassport() {
+  ls.set(fireworksKey(), true);
+  fireworks();
+}
+function fireworks({ ms = 7000 } = {}) {
+  if (document.querySelector(".fw-layer")) return;
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const wrap = document.createElement("div");
+  wrap.className = "fw-layer";
+  wrap.innerHTML = `<canvas aria-hidden="true"></canvas>
+    <div class="fw-msg" role="status"><span class="eyebrow">World Showcase Passport</span><b>Passport complete!</b><small>Every country stamped${state.me ? `, ${esc(state.me.name)}` : ""}. Tap to close.</small></div>`;
+  document.body.append(wrap);
+  let alive = true, raf = 0;
+  const close = () => { if (!alive) return; alive = false; cancelAnimationFrame(raf); wrap.classList.add("out"); setTimeout(() => wrap.remove(), 450); };
+  wrap.addEventListener("pointerdown", close);
+  if (reduce) { setTimeout(close, 4500); return; }   // just the message, no motion
+
+  const cv = wrap.querySelector("canvas"), cx = cv.getContext("2d");
+  const dpr = Math.min(2, devicePixelRatio || 1);
+  let W = 0, H = 0;
+  const size = () => { W = innerWidth; H = innerHeight; cv.width = W * dpr; cv.height = H * dpr; cx.setTransform(dpr, 0, 0, dpr, 0, 0); };
+  size(); addEventListener("resize", size, { once: true });
+  const css = getComputedStyle(document.documentElement);
+  const palette = [css.getPropertyValue("--accent").trim(), css.getPropertyValue("--accent-2").trim(), "#f2c94c", "#ffffff", "#7ee8ff", "#ff7aa8", "#9dff8a", "#c9a24c"].filter(Boolean);
+  const pick = (a) => a[Math.floor(Math.random() * a.length)];
+  const rockets = [], sparks = [];
+  const launch = () => {
+    const x = W * (.15 + Math.random() * .7);
+    rockets.push({ x, y: H, vx: (Math.random() - .5) * 1.2, vy: -(H * .011 + Math.random() * H * .004), top: H * (.14 + Math.random() * .32), color: pick(palette) });
+  };
+  const burst = (r) => {
+    const n = 70 + Math.floor(Math.random() * 40), speed = 2.2 + Math.random() * 2.2, ring = Math.random() < .35;
+    const c2 = Math.random() < .5 ? pick(palette) : r.color;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + Math.random() * .1, v = ring ? speed : speed * (.35 + Math.random() * .75);
+      sparks.push({ x: r.x, y: r.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 1, decay: .011 + Math.random() * .012, color: i % 3 ? r.color : c2, glitter: Math.random() < .25 });
+    }
+  };
+  const t0 = performance.now();
+  let next = 0;
+  const frame = (now) => {
+    if (!alive) return;
+    const t = now - t0;
+    if (t < ms && now > next) { launch(); if (Math.random() < .35) launch(); next = now + 260 + Math.random() * 420; }
+    // fade the previous frame (trails) while keeping the canvas see-through
+    cx.globalCompositeOperation = "destination-out";
+    cx.fillStyle = "rgba(0,0,0,.2)"; cx.fillRect(0, 0, W, H);
+    cx.globalCompositeOperation = "lighter";
+    for (let i = rockets.length - 1; i >= 0; i--) {
+      const r = rockets[i];
+      r.x += r.vx; r.y += r.vy; r.vy += .06;
+      cx.fillStyle = r.color; cx.beginPath(); cx.arc(r.x, r.y, 2, 0, Math.PI * 2); cx.fill();
+      if (r.y <= r.top || r.vy >= -.5) { burst(r); rockets.splice(i, 1); }
+    }
+    for (let i = sparks.length - 1; i >= 0; i--) {
+      const p = sparks[i];
+      p.x += p.vx; p.y += p.vy; p.vx *= .985; p.vy = p.vy * .985 + .035; p.life -= p.decay;
+      if (p.life <= 0) { sparks.splice(i, 1); continue; }
+      if (p.glitter && Math.random() < .5) continue;
+      cx.globalAlpha = Math.max(0, p.life);
+      cx.fillStyle = p.color; cx.beginPath(); cx.arc(p.x, p.y, 1.6 + p.life, 0, Math.PI * 2); cx.fill();
+    }
+    cx.globalAlpha = 1;
+    if (t > ms && !rockets.length && !sparks.length) return close();
+    raf = requestAnimationFrame(frame);
+  };
+  raf = requestAnimationFrame(frame);
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -1756,6 +1838,7 @@ function importPreview(p, ok) {
 async function checkin(drinkId, patch) {
   if (!state.me) { joinSheet(); return; }
   const d = drinkById(drinkId);
+  const wasDone = myRec() ? passportStatus(myRec()).done : false;
   let rec = myRec();
   if (!rec) { rec = { name: state.me.name, emoji: state.me.emoji, items: {} }; D().members.push(rec); }
   const cur = { ...(rec.items[drinkId] || {}), ...patch, at: new Date().toISOString() };
@@ -1763,6 +1846,8 @@ async function checkin(drinkId, patch) {
   rec.items[drinkId] = cur;
   if (patch.tried && !myItem(drinkId).rating) {} // noop
   render();
+  // That was the last country: fireworks!
+  if (!wasDone && passportStatus(rec).done) celebratePassport();
   const snapshot = d ? { name: d.name, booth: d.booth, price: d.price, type: d.type, country: d.country, park: parkOf(d), festival: parkOf(d) !== "epcot" ? PK(parkOf(d)).short : d.yearRound ? "Year-round" : festLabel() } : undefined;
   try {
     const out = await api("checkin", { method: "POST", body: { member: state.me.name, emoji: state.me.emoji, drinkId, snapshot, ...patch } });
@@ -1825,6 +1910,7 @@ document.addEventListener("click", (ev) => {
   if (t.hasAttribute("data-closespot")) { state.sel = null; state.drawer = "peek"; render(); return; }
   if (t.hasAttribute("data-join")) return joinSheet();
   if (t.hasAttribute("data-parks")) return parksSheet();
+  if (t.hasAttribute("data-fireworks")) return fireworks();
   if (t.dataset.sbooth !== undefined) {
     state.spotBooth = state.spotBooth === t.dataset.sbooth ? null : t.dataset.sbooth;
     document.querySelectorAll("[data-sbooth]").forEach((b) => b.classList.toggle("on", b.dataset.sbooth === state.spotBooth));

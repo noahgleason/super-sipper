@@ -497,8 +497,9 @@ select.sort { border: 1px solid var(--line-2); background: var(--surface); borde
 .passport .meta b { font-family: var(--display); font-size: 1.4rem; display: block; color: #fff; line-height: 1; }
 .passport .seal { position: absolute; right: -24px; top: -24px; width: 130px; height: 130px; opacity: .15; color: #c9a24c; }
 .passport .seal .i { width: 100%; height: 100%; stroke-width: .6; }
-.stamps { display: grid; grid-template-columns: repeat(auto-fill, minmax(74px, 1fr)); gap: 10px 8px; margin-top: 18px; }
 .stamp-label { margin: 18px 0 -8px; font-family: var(--display); font-weight: 700; font-size: .72rem; letter-spacing: .18em; text-transform: uppercase; color: #c9a24c; opacity: .85; }
+.stamp-label small { margin-left: 6px; font-family: var(--body); font-weight: 500; font-size: .68rem; letter-spacing: 0; text-transform: none; opacity: .8; }
+.stamps { display: grid; grid-template-columns: repeat(auto-fill, minmax(74px, 1fr)); gap: 10px 8px; margin-top: 18px; }
 .stamp { aspect-ratio: 1; position: relative; display: grid; place-items: center; }
 .stamp svg.st { width: 100%; height: 100%; overflow: visible; }
 .stamp.empty-s { opacity: .35; }
@@ -574,3 +575,19 @@ details.srcs summary { font-family: var(--display); font-weight: 700; letter-spa
 .toast { position: fixed; left: 50%; bottom: calc(var(--tabbar) + env(safe-area-inset-bottom) + 140px); transform: translateX(-50%); background: var(--chrome); color: var(--chrome-ink); padding: 11px 16px; border-radius: var(--r); border-left: 4px solid var(--accent); font-size: .9rem; font-weight: 600; z-index: 70; box-shadow: 0 8px 24px rgba(0,0,0,.3); max-width: calc(100% - 32px); text-align: center; }
 .offline { background: var(--accent-2); color: #231800; text-align: center; font-size: .8rem; font-weight: 700; padding: 7px; border-radius: var(--r); margin-bottom: 12px; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* Finished passport + fireworks */
+.pp-done { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 10px 12px; border: 1px solid #c9a24c; background: rgba(201,162,76,.14); border-radius: var(--r); }
+.pp-done > .i { width: 26px; height: 26px; color: #f2c94c; flex: none; }
+.pp-done b { display: block; font-family: var(--display); font-size: 1.15rem; letter-spacing: .04em; text-transform: uppercase; color: #fff; line-height: 1.05; }
+.pp-done small { font-size: .78rem; opacity: .8; }
+.pp-done .btn { margin-left: auto; flex: none; }
+.passport.complete { box-shadow: 0 0 0 2px #c9a24c, var(--shadow); }
+.fw-layer { position: fixed; inset: 0; z-index: 90; background: radial-gradient(120% 90% at 50% 110%, rgba(40,52,96,.78), rgba(6,9,22,.88)); animation: fw-in .35s ease; cursor: pointer; }
+.fw-layer.out { opacity: 0; transition: opacity .4s; }
+.fw-layer canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.fw-msg { position: absolute; left: 16px; right: 16px; bottom: calc(env(safe-area-inset-bottom) + 96px); text-align: center; color: #fff; pointer-events: none; }
+.fw-msg .eyebrow { color: #c9a24c; }
+.fw-msg b { display: block; font-family: var(--display); font-weight: 800; font-size: 2.3rem; line-height: 1; letter-spacing: .03em; text-transform: uppercase; margin: 6px 0; text-shadow: 0 2px 18px rgba(0,0,0,.5); }
+.fw-msg small { opacity: .8; font-size: .9rem; }
+@keyframes fw-in { from { opacity: 0; } }
