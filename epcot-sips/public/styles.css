@@ -138,6 +138,12 @@ body:not([data-tab="map"]) .map-view { display: none; }
 .map-overlay { position: absolute; inset: 0; pointer-events: none; }
 .map-overlay > div { position: absolute; left: 0; top: 0; will-change: transform; backface-visibility: hidden; }
 .map-overlay text { font-family: var(--display); pointer-events: none; }
+/* Day/night tint (values set by applySky) */
+#map .sky-dark { fill: #0b1640; mix-blend-mode: multiply; opacity: var(--sky-dark, 0); pointer-events: none; }
+#map .sky-warm { fill: #ffae63; mix-blend-mode: multiply; opacity: var(--sky-warm, 0); pointer-events: none; }
+#map .sky-lights { opacity: var(--sky-lights, 0); mix-blend-mode: screen; pointer-events: none; }
+body[data-sky="night"] .mlabel.fw span { color: #e9eefb; --h: rgba(12,18,40,.85); }
+body[data-sky="night"] .map-view { background: #1a2433; }
 .map-view::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: #000; opacity: var(--map-dim); z-index: 1; }
 .map-view::before { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 1; box-shadow: inset 0 0 80px rgba(20,30,15,.35); }
 

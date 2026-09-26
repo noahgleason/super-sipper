@@ -278,6 +278,43 @@ const el = (tag, attrs = {}, parent) => {
   parent?.appendChild(e);
   return e;
 };
+// ── Day / night ────────────────────────────────────────────────────────────
+// Sun altitude (degrees) over EPCOT, from the standard low-precision solar formulas.
+// Works from UTC, so the sky follows EPCOT's sunset no matter what time zone the phone is in.
+function sunAltitude(date = new Date(), lat = MAP.origin.lat, lng = MAP.origin.lng) {
+  const rad = Math.PI / 180, d = (date.getTime() - 946728000000) / 86400000; // days since J2000
+  const g = (357.529 + 0.98560028 * d) * rad;
+  const L = (280.459 + 0.98564736 * d + 1.915 * Math.sin(g) + 0.02 * Math.sin(2 * g)) * rad;
+  const e = (23.439 - 0.00000036 * d) * rad;
+  const ra = Math.atan2(Math.cos(e) * Math.sin(L), Math.cos(L)), dec = Math.asin(Math.sin(e) * Math.sin(L));
+  const gmst = 18.697374558 + 24.06570982441908 * d;
+  const ha = (gmst * 15 + lng) * rad - ra;
+  return Math.asin(Math.sin(lat * rad) * Math.sin(dec) + Math.cos(lat * rad) * Math.cos(dec) * Math.cos(ha)) / rad;
+}
+// "?sky=21:30" previews the map at that time today (EPCOT time).
+function skyTime() {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(new URLSearchParams(location.search).get("sky") || "");
+  if (!m) return new Date();
+  const now = new Date(), ymd = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(now);
+  const guess = new Date(`${ymd}T${m[1].padStart(2, "0")}:${m[2]}:00Z`);
+  const off = new Date(guess.toLocaleString("en-US", { timeZone: "America/New_York" })) - new Date(guess.toLocaleString("en-US", { timeZone: "UTC" }));
+  return new Date(guess.getTime() - off);
+}
+function applySky() {
+  const alt = sunAltitude(skyTime());
+  const clamp = (x) => Math.max(0, Math.min(1, x));
+  const ease = (x) => x * x * (3 - 2 * x);
+  const night = ease(clamp((4 - alt) / 12));                       // 0 above 4°, 1 below -8°
+  const warm = clamp(1 - Math.abs(alt - 1) / 9) * (1 - night * .6);  // golden hour around sunrise/sunset
+  const lights = ease(clamp((1 - alt) / 7));                       // lamps on from sunset
+  const root = document.documentElement.style;
+  root.setProperty("--sky-dark", (night * .66).toFixed(3));
+  root.setProperty("--sky-warm", (warm * .38).toFixed(3));
+  root.setProperty("--sky-lights", lights.toFixed(3));
+  document.body.dataset.sky = night > .6 ? "night" : warm > .3 ? "golden" : "day";
+}
+setInterval(applySky, 60000);
+
 function buildMap() {
   const A = D().anchors, ring = D().ring, M = MAP.layers, L = MAP.labels;
   geo = { lat0: MAP.origin.lat, lng0: MAP.origin.lng, pts: {} };
@@ -347,6 +384,28 @@ function buildMap() {
   const se = L.spaceshipEarth;
   const sg = el("g", { transform: `translate(${se[0].toFixed(1)} ${se[1].toFixed(1)}) scale(1.6)` }, world);
   sg.innerHTML = spaceshipEarth();
+
+  // Day/night: the whole map is tinted by the real sun over EPCOT (see applySky), and after dark
+  // the pavilions, Spaceship Earth and the walkway lamps light up.
+  const cover = { x: C.x - 1600, y: C.y - 1600, width: 3200, height: 3200 };
+  el("rect", { ...cover, class: "sky-warm" }, world);
+  el("rect", { ...cover, class: "sky-dark" }, world);
+  const lights = el("g", { class: "sky-lights" }, world);
+  lights.innerHTML = `<defs>
+      <radialGradient id="glowWarm"><stop offset="0" stop-color="#ffd27a" stop-opacity=".75"/><stop offset=".45" stop-color="#ffb347" stop-opacity=".28"/><stop offset="1" stop-color="#ff9a3c" stop-opacity="0"/></radialGradient>
+      <radialGradient id="glowSE"><stop offset="0" stop-color="#e9f0ff" stop-opacity=".9"/><stop offset=".35" stop-color="#9d8cff" stop-opacity=".45"/><stop offset="1" stop-color="#5a4dff" stop-opacity="0"/></radialGradient>
+    </defs>`;
+  const glowD = (d, w, color, op) => d && el("path", { d, fill: "none", stroke: color, "stroke-width": w, "stroke-dasharray": "0 22", opacity: op }, lights);
+  el("path", { d: M.attr, fill: "#ffcf7a", opacity: .3 }, lights);
+  el("path", { d: M.bld, fill: "#ffcf7a", opacity: .08 }, lights);
+  glowD(M.walkW, 9, "#ffc86a", .22); glowD(M.walk, 8, "#ffc86a", .22);
+  glowD(M.walkW, 2, "#fff1c4", 1); glowD(M.walk, 1.8, "#fff1c4", 1);
+  for (const [id, a] of Object.entries(A)) {
+    if (a.kind !== "pavilion" && a.kind !== "landmark" || id === "spaceship-earth") continue;
+    el("circle", { cx: P[id].x.toFixed(1), cy: P[id].y.toFixed(1), r: a.kind === "pavilion" ? 48 : 34, fill: "url(#glowWarm)" }, lights);
+  }
+  el("circle", { cx: se[0].toFixed(1), cy: se[1].toFixed(1), r: 70, fill: "url(#glowSE)" }, lights);
+  applySky();
 
   // Bounds → initial fit
   const ids = [...ring, "spaceship-earth", "the-land", "mission-space"];
@@ -1601,7 +1660,7 @@ setInterval(() => {
   if (document.visibilityState !== "visible" || !$("#sheet").hidden || document.activeElement?.id === "q") return;
   load({ quiet: true });
 }, 30000);
-document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") load({ quiet: true }); });
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { applySky(); load({ quiet: true }); } });
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
 
 const cached = ls.get(LS.cache);

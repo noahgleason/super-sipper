@@ -5,6 +5,7 @@ A phone app for the whole family, built around a live map of EPCOT. It keeps its
 ## What it does
 
 - **Map of EPCOT.** The map is 1:1 with the real park: the lagoon, walkways, gardens and building footprints come from OpenStreetMap (the same geography as the map in the Disney World app), drawn in an illustrated style with a landmark for each pavilion (pyramid, pagoda, Eiffel Tower and so on) and a drink count. Festival booths show as flag pins. North is at the bottom, so the gates are at the bottom and World Showcase is at the top, like Disney's printed park maps.
+  - **Day and night:** the map follows the real sun over EPCOT. It turns golden around sunrise and sunset, and after dark the walkway lamps, pavilions and Spaceship Earth light up. Add `?sky=21:30` to the URL to preview any time of day.
   - **Moving around:** pinch to zoom, drag to pan. Tap a pavilion to open a drawer with its drinks.
   - **Your location:** the locate button shows a blue "you are here" dot and walking times.
   - **Filters:** a collapsible panel. Turn the festival and year-round drinks on or off. Filter by cocktails, frozen, beer, wine, kid-friendly, coffee, open now, new this week, haven't tried, or your wishlist.
