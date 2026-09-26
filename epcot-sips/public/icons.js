@@ -1,4 +1,4 @@
-// Epcot Sips — hand-drawn SVG art: UI icons, flags, pavilion landmarks, avatars.
+// Epcot Sips — hand-drawn SVG art: UI icons, flags, pavilion and land landmarks, park landmarks, avatars.
 // Everything here is original artwork, inlined so it works offline.
 
 // ── UI icons (24×24, stroked) ────────────────────────────────────────────────
@@ -242,6 +242,206 @@ export const LANDMARKS = {
     <path d="M-22.3-7h2.6M-22.3-3h2.6M-22.3 1h2.6" stroke="#c4442f" stroke-width="1.2"/><path d="M-24-10h6" stroke="#2c5c7c" stroke-width="1.3"/>`,
 };
 export const PAV_KEYS = Object.keys(LANDMARKS);
+
+// ── Park landmarks (drawn big on each park's map, and small on the park switcher) ──
+const CASTLE = `${shadow(19)}
+    <path d="M-17 8V-4h34V8z" fill="#e9e4f2" ${O}/>
+    <path d="M-2.4 8V2.5a2.4 2.4 0 0 1 4.8 0V8z" fill="#2a241e"/>
+    <path d="M-17-4h34" stroke="#c9bfe0" stroke-width="1"/>
+    <path d="M-15.5-4v-9h4v9zM11.5-4v-9h4v9z" fill="#ece8f4" ${O}/>
+    <path d="M-16.3-13-13.5-20.5-10.7-13zM10.7-13l2.8-7.5 2.8 7.5z" fill="#3b63b8" ${O}/>
+    <path d="M-9-4v-12h5v12zM4-4v-12h5v12z" fill="#f1edf7" ${O}/>
+    <path d="M-9.8-16-6.5-24.5-3.2-16zM3.2-16l3.3-8.5 3.3 8.5z" fill="#3b63b8" ${O}/>
+    <path d="M-3.2-4v-17h6.4v17z" fill="#f4f1f9" ${O}/>
+    <path d="M-4-21 0-31 4-21z" fill="#3b63b8" ${O}/>
+    <path d="M0-31v-2.6" stroke="#d6a741" stroke-width=".8"/>
+    <circle cx="0" cy="-13.5" r="1.6" fill="#d6a741"/>
+    ${win([-13.9, 12.9], -10, 1.2, 2)}${win([-7, 6], -12, 1.2, 2.2)}${win([-0.6], -18, 1.2, 2.2)}`;
+const TOWER = `${shadow(16)}
+    <path d="M-15 8V-6h7V8zM8 8V-6h7V8z" fill="#b98e6a" ${O}/>
+    <path d="M-8 8V-25h16V8z" fill="#c9a27a" ${O}/>
+    <path d="M-9-25h18l-2-3h-14z" fill="#7d4a3a" ${O}/>
+    <path d="M-6-28v-2.5h12v2.5z" fill="#a8743f" ${O}/>
+    ${[-21, -16, -11, -6, -1].map((y) => win([-5.6, -2, 1.6, 5.2], y, 1.4, 2.4, "#3d2f28")).join("")}
+    ${win([-13, -10.5, 9.5, 12], -3, 1.2, 2, "#3d2f28")}${win([-13, -10.5, 9.5, 12], 2, 1.2, 2, "#3d2f28")}
+    <path d="M-8-9 2-13 8-11" stroke="#2a241e" stroke-width="1.1" fill="none"/>
+    <path d="M-6.5-23.5h13" stroke="#6f8f4a" stroke-width="1.3"/>
+    <path d="M-2 8V4h4v4z" fill="#2a241e"/>`;
+const TREE = `${shadow(19)}
+    <path d="M-6 8Q-4-1-8-8L-3-6Q0-11 3-6L8-8Q4-1 6 8z" fill="#8a6a4a" ${O}/>
+    <path d="M-3 6q1-6-1-11M2 7q-1-7 1-12M-5 1l3 1M3 -2l3 1" stroke="#5e4630" stroke-width=".6" fill="none"/>
+    <circle cx="-11" cy="-10" r="7.5" fill="#6b9a4a" ${O}/><circle cx="11" cy="-10" r="7.5" fill="#6b9a4a" ${O}/>
+    <circle cx="-5" cy="-17" r="8" fill="#7fae55" ${O}/><circle cx="6" cy="-17" r="8" fill="#7fae55" ${O}/>
+    <circle cx="0" cy="-11" r="7" fill="#8cbc60" ${O}/>
+    <circle cx="-15" cy="-5" r="4.5" fill="#5f8c42" ${O}/><circle cx="15" cy="-5" r="4.5" fill="#5f8c42" ${O}/>
+    <path d="M-7-19q2-2 4 0M4-15q2-2 4 0M-12-9q2-2 4 0" stroke="#4d7a35" stroke-width=".6" fill="none"/>`;
+const SPHERE = `${shadow(12)}
+    <path d="M-7 5-9 8M7 5l2 3M0 6v2" stroke="#8b949c" stroke-width="1.6"/>
+    <circle cy="-8" r="13" fill="#d7dce2" ${O}/>
+    <path d="M-12-12h24M-13-6h26M-11 0h22M-6-20.5 6 4M6-20.5-6 4M-12-14 0 5M12-14 0 5" stroke="#9aa3ad" stroke-width=".5"/>
+    <circle cx="-4" cy="-13" r="4" fill="#fff" opacity=".6"/>`;
+const HERO = { castle: CASTLE, tower: TOWER, tree: TREE };
+export const heroArt = (kind) => HERO[kind] || "";
+export const parkGlyph = (park) => ({ epcot: SPHERE, mk: CASTLE, hs: TOWER, ak: TREE })[park] || SPHERE;
+
+// ── Land landmarks for Magic Kingdom, Hollywood Studios and Animal Kingdom ─────
+export const LAND_ART = {
+  "mk-main-street": `${shadow(19)}
+    <path d="M-17 8V-4h34V8z" fill="#c9553e" ${O}/>
+    <path d="M-18.5-4h37" stroke="#f4efe4" stroke-width="1.6"/>
+    ${win([-15, -12, -9, 7.4, 10.4, 13.4], -1.5, 1.7, 2.6, "#f4efe4")}${win([-15, -12, -9, 7.4, 10.4, 13.4], 3.5, 1.7, 2.6, "#f4efe4")}
+    <path d="M-17-4-13-9h26l4 5z" fill="#4d6b8a" ${O}/>
+    <path d="M-5.5 8V-13h11V8z" fill="#efe3c8" ${O}/>
+    <circle cx="0" cy="-7" r="3" fill="#fff" ${O}/><path d="M0-8.8V-7l1.3.9" stroke="#2a241e" stroke-width=".55" fill="none"/>
+    <path d="M-7-13 0-20 7-13z" fill="#4d6b8a" ${O}/><path d="M0-20v-4" stroke="#2a241e" stroke-width=".7"/>
+    <path d="M0-24h3.5l-1 1 1 1H0" fill="#c8302a"/>
+    <path d="M-2 8V3a2 2 0 0 1 4 0v5z" fill="#2a241e"/>`,
+  "mk-adventureland": `${shadow(18)}
+    <path d="M-15 8V-2h16V8z" fill="#a9763f" ${O}/>
+    <path d="M-12 8V2h4v6zM-5 8V2h4v6z" fill="#5e3f22"/>
+    <path d="M-19-2-7-14 5-2z" fill="#d9b25c" ${O}/>
+    <path d="M-15-4h16M-12-7h10M-9-10h4" stroke="#b08a3a" stroke-width=".7"/>
+    <path d="M10 8Q13-3 9-15" stroke="#7a5337" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+    <path d="M9-15q-7-2-11 3 5-1 11-3zM9-15q6-4 11 0-6 0-11 0zM9-15q-2-6 3-10 0 5-3 10zM9-15q5 2 7 8-4-4-7-8zM9-15q-6 2-8 8 3-5 8-8z" fill="#4f9a45" ${O}/>
+    <path d="M-17 8V-6" stroke="#6b4a2f" stroke-width="1.2"/><path d="M-18.4-9-17-6.5-15.6-9-17-12z" fill="#f2a33a" ${O}/>`,
+  "mk-frontierland": `${shadow(19)}
+    <path d="M-19 8-15-6-11-3-8-15-4-10-1-21 3-12 7-16 11-4 15-8 19 8z" fill="#c1623a" ${O}/>
+    <path d="M-16 0h32M-13-6h11M2-9h9M-6-13h6" stroke="#9c4a2b" stroke-width=".9"/>
+    <path d="M-1-21 1-12M-8-15l2 6M7-16l1 7" stroke="#e08a5a" stroke-width=".7"/>
+    <path d="M-18 8h36" stroke="#6b4a2f" stroke-width="1.2"/>
+    <path d="M-15 8v-4M-10 8v-4M-5 8v-4M0 8v-4M5 8v-4M10 8v-4M15 8v-4M-16 4h32" stroke="#6b4a2f" stroke-width=".8"/>`,
+  "mk-liberty-square": `${shadow(18)}
+    <path d="M-15 8V-6h30V8z" fill="#9a4b3a" ${O}/>
+    <path d="M-15-1h30M-15 3.5h30" stroke="#7a3a2c" stroke-width=".5"/>
+    ${win([-12, -8, 6.4, 10.4], -4, 1.8, 3, "#f4efe4")}${win([-12, -8, 6.4, 10.4], 1.5, 1.8, 3, "#f4efe4")}
+    <path d="M-16.5-6 0-13 16.5-6z" fill="#3e4a52" ${O}/>
+    <path d="M-3.5-13v-5h7v5z" fill="#e9e2d0" ${O}/><path d="M-1-15.5h2" stroke="#2a241e" stroke-width="1"/>
+    <path d="M-4.5-18 0-23 4.5-18z" fill="#3e4a52" ${O}/><path d="M0-23v-3" stroke="#2a241e" stroke-width=".6"/>
+    <path d="M-3 8V-2h6V8z" fill="#f4efe4" ${O}/><path d="M-1.4 8V1.5h2.8V8z" fill="#2a241e"/>`,
+  "mk-fantasyland": `${shadow(18)}
+    <path d="M-14 8V-3h28V8z" fill="#f4efe4" ${O}/>
+    <path d="M-10.5 8V-3M-7 8V-3M-3.5 8V-3M0 8V-3M3.5 8V-3M7 8V-3M10.5 8V-3" stroke="#e36a92" stroke-width="1.3"/>
+    <path d="M-17-3 0-19 17-3z" fill="#f4efe4" ${O}/>
+    <path d="M0-19-12.5-3h4.2zM0-19-4.2-3H0zM0-19 4.2-3h4.2zM0-19l12.5 16" fill="#e36a92"/>
+    <path d="M-17-3 0-19 17-3z" fill="none" ${O}/>
+    <path d="M-17-3q2.8 2.2 5.7 0 2.8 2.2 5.6 0 2.9 2.2 5.7 0 2.8 2.2 5.7 0 2.8 2.2 5.6 0 2.9 2.2 5.7 0" fill="#f2c94c" ${O}/>
+    <path d="M0-19v-5" stroke="#2a241e" stroke-width=".7"/><path d="M0-24h4l-1 1.2 1 1.2H0" fill="#3b63b8"/>
+    <path d="M-2.4 8V2.5a2.4 2.4 0 0 1 4.8 0V8z" fill="#2a241e"/>`,
+  "mk-tomorrowland": `${shadow(19)}
+    <path d="M-18 8 0-20 18 8z" fill="#f2f4f6" ${O}/>
+    <path d="M-13 8-2-15M13 8 2-15M-6 8-1-17M6 8 1-17" stroke="#aab3bd" stroke-width=".7"/>
+    <path d="M-18 8-21 3-15 6zM18 8l3-5-6 3z" fill="#c8cdd3" ${O}/>
+    <path d="M0-20v-6" stroke="#2a241e" stroke-width=".8"/><circle cx="0" cy="-26.5" r="1" fill="#e5484d"/>
+    <path d="M-19 8h38" stroke="#3b63b8" stroke-width="1.6"/>
+    <path d="M-10 4h20" stroke="#6fc3df" stroke-width=".9"/>`,
+
+  "hs-hollywood-boulevard": `${shadow(19)}
+    <path d="M-12 8V-4h24V8z" fill="#b3302a" ${O}/>
+    <path d="M-17-4Q0-9.5 17-4L10-11Q0-14-10-11z" fill="#3f7a5a" ${O}/>
+    <path d="M-7-11v-3h14v3z" fill="#b3302a" ${O}/>
+    <path d="M-10-14Q0-18 10-14L0-21z" fill="#3f7a5a" ${O}/>
+    <path d="M-18 8V-10l1.5-2 1.5 2V8zM15 8V-10l1.5-2 1.5 2V8z" fill="#d6a741" ${O}/>
+    <path d="M-4 8V1a4 4 0 0 1 8 0v7z" fill="#2a241e"/>
+    <path d="M-9-1h3M6-1h3" stroke="#f2c94c" stroke-width="1"/>`,
+  "hs-sunset-boulevard": `${shadow(19)}
+    <path d="M-17 8V-6h34V8z" fill="#e9dcc0" ${O}/>
+    <path d="M-19-6h38v-7h-38z" fill="#2a2f36" ${O}/>
+    <path d="M-15-9.5h30" stroke="#f2c94c" stroke-width="2.2" stroke-dasharray="1.6 1.4"/>
+    <path d="M-6-13 0-21 6-13z" fill="#c4442f" ${O}/><path d="M0-21v-4" stroke="#2a241e" stroke-width=".7"/>
+    <path d="M-12 8V1h7v7zM5 8V1h7v7z" fill="#8a4a6a" ${O}/>
+    <path d="M-2.6 8V2a2.6 2.6 0 0 1 5.2 0v6z" fill="#2a241e"/>
+    <path d="M-21 8Q-22-1-19-9M21 8q1-9-2-17" stroke="#7a5337" stroke-width="1.2" fill="none"/>
+    <path d="M-19-9q-4-1-6 2 3-1 6-2zM-19-9q3-3 6-1-3 0-6 1zM19-9q-3-3-6-1 3 0 6 1zM19-9q4-1 6 2-3-1-6-2z" fill="#4f9a45" ${O}/>`,
+  "hs-echo-lake": `<ellipse cx="0" cy="7" rx="20" ry="4.2" fill="#3f9cc4" ${O}/>
+    <path d="M-12 4q4-7 9-6 5 1 7-4 2-7 1-12-1-3 2-4 4-1 5 2 1 3-3 4-2 1-2 7-1 7-4 12 3 1 6 3z" fill="#5f9448" ${O}/>
+    <circle cx="8.3" cy="-18.2" r=".8" fill="#2a241e"/>
+    <path d="M-7 1q2-2 4 0M-1 0q2-2 4 0" stroke="#3f6e33" stroke-width=".7" fill="none"/>
+    <path d="M-16 7q3-1.5 6 0M10 7q3-1.5 6 0" stroke="#fff" stroke-width=".7" fill="none"/>`,
+  "hs-grand-avenue": `${shadow(18)}
+    <path d="M-16 8V-8h20V8z" fill="#a8583f" ${O}/>
+    <path d="M-16-3h20M-16 2h20" stroke="#8a4331" stroke-width=".5"/>
+    ${win([-13, -9, -5, -1], -6, 2, 2.4, "#f6e7c7")}${win([-13, -9, -5, -1], -0.5, 2, 2.4, "#f6e7c7")}
+    <path d="M6 8V-2h10V8z" fill="#8d6e5a" ${O}/>
+    <path d="M9-6V-2M14-6V-2" stroke="#2a241e" stroke-width=".8"/>
+    <path d="M7-6h9v-9a4.5 4.5 0 0 0-9 0z" fill="#6b4a2f" ${O}/><path d="M7-10h9" stroke="#4e3322" stroke-width=".6"/>
+    <path d="M6.5-15.2 11.5-19l5 3.8z" fill="#4e3322" ${O}/>
+    <path d="M-14-11h16" stroke="#e5484d" stroke-width="1.6" stroke-linecap="round"/>`,
+  "hs-galaxys-edge": `${shadow(19)}
+    <path d="M-19 8-16-12-13-10-11 8zM12 8l2-16 2 1 3 15z" fill="#b08a64" ${O}/>
+    <path d="M-17-6h3M14-2h3" stroke="#8a6a4a" stroke-width=".7"/>
+    <ellipse cx="0" cy="-1" rx="15" ry="4.5" fill="#c9ccd1" ${O}/>
+    <path d="M-10-3Q0-10 10-3z" fill="#aeb3ba" ${O}/>
+    <path d="M13-2h6v2.6h-6z" fill="#c9ccd1" ${O}/><path d="M-15 0-19-1.5-19 1.5z" fill="#8a9099"/>
+    <path d="M-3-6.5-1-10.5 2-6.5" stroke="#2a241e" stroke-width=".7" fill="none"/><circle cx="-1" cy="-11" r="1.2" fill="#aeb3ba" ${O}/>
+    <path d="M-8 2h16" stroke="#6fc3df" stroke-width="1"/>
+    <path d="M-12 3.5 -15 8M12 3.5l3 4.5" stroke="#6b7079" stroke-width="1"/>`,
+  "hs-toy-story-land": `${shadow(17)}
+    <path d="M-15 8V-4h11V8z" fill="#e5484d" ${O}/><path d="M-4 8V-4h11V8z" fill="#3b63b8" ${O}/>
+    <path d="M-10 -4V-16h11V-4z" fill="#f2c94c" ${O}/>
+    <path d="M-12.6 1.2l1.7-3.6 1.7 3.6zM-0.6 1.2 1.1-2.4 2.8 1.2zM-6.6-10.8-4.9-14.4-3.2-10.8z" fill="#fff"/>
+    <path d="M9 8V-3a4 4 0 0 1 8 0V8z" fill="#5f9448" ${O}/>
+    <circle cx="13" cy="-7" r="4" fill="#5f9448" ${O}/><circle cx="11.6" cy="-8" r=".7" fill="#fff"/><circle cx="14.4" cy="-8" r=".7" fill="#fff"/>
+    <path d="M11-2q2 1.6 4 0" stroke="#2a241e" stroke-width=".6" fill="none"/>`,
+  "hs-pixar-plaza": `${shadow(15)}
+    <circle cx="-3" cy="-5" r="12" fill="#f2c94c" ${O}/>
+    <path d="M-14.2-9Q-3-3 8.2-9M-14.8-1.6Q-3 4.4 8.8-1.6" stroke="#3b63b8" stroke-width="2.6" fill="none"/>
+    <path d="M-3-13.8l1.3 2.7 3 .4-2.2 2.1.5 3-2.6-1.4-2.6 1.4.5-3-2.2-2.1 3-.4z" fill="#e5484d" ${O}/>
+    <path d="M11 8V-2M11-2l5-8" stroke="#8a9099" stroke-width="1.6"/>
+    <path d="M14-12l6 3-3 4.5-5-3z" fill="#c9ccd1" ${O}/>
+    <path d="M8 8h6" stroke="#8a9099" stroke-width="2"/>`,
+  "hs-commissary-lane": `${shadow(16)}
+    <path d="M-14 8V-6h26V8z" fill="#2a2f36" ${O}/>
+    <path d="M-10 8V-6M-4 8V-6M2 8V-6M8 8V-6" stroke="#f4efe4" stroke-width="1" opacity=".6"/>
+    <path d="M-15-6-12-15 13-10 12-6z" fill="#2a2f36" ${O}/>
+    <path d="M-10-14.5-8-7M-4-13.4-2-6.5M2-12.2 4-6.2M8-11 9.5-6" stroke="#f4efe4" stroke-width="1.6"/>
+    <path d="M-10 0h18" stroke="#f2c94c" stroke-width="1"/>`,
+
+  "ak-oasis": `${shadow(17)}
+    <path d="M-16 8Q-15-6-6-9-2-14 5-10 13-8 15 8z" fill="#9c8a72" ${O}/>
+    <path d="M-2-9Q-1 0-3 8M1-10q1 9-1 18" stroke="#8fd0dc" stroke-width="2.4" fill="none"/>
+    <path d="M-2-9Q-1 0-3 8" stroke="#fff" stroke-width=".6" fill="none"/>
+    <ellipse cx="-1" cy="7" rx="7" ry="1.8" fill="#3f9cc4"/>
+    <path d="M-12-6q-4-5-9-3 4 0 9 3zM-12-6q0-6 5-8-2 4-5 8zM-12-6q4-4 9-2-5 0-9 2z" fill="#4f9a45" ${O}/>
+    <path d="M-12-6-11 8" stroke="#7a5337" stroke-width="1.4"/>
+    <circle cx="11" cy="-3" r="5" fill="#6b9a4a" ${O}/>`,
+  "ak-discovery-island": `${shadow(18)}
+    <path d="M-15 8V-3h30V8z" fill="#f2c94c" ${O}/>
+    <path d="M-15 1h30" stroke="#c4442f" stroke-width="1.4"/><path d="M-15 4.5h30" stroke="#2f9a8a" stroke-width="1.2"/>
+    <path d="M-10 8V-3M-5 8V-3M5 8V-3M10 8V-3" stroke="#8a5a36" stroke-width="1.1"/>
+    <path d="M-2.4 8V2.5a2.4 2.4 0 0 1 4.8 0V8z" fill="#2a241e"/>
+    <path d="M-19-3-9-13H9L19-3z" fill="#d9b25c" ${O}/>
+    <path d="M-15-5h30M-12-8h24M-9.5-11h19" stroke="#b08a3a" stroke-width=".6"/>
+    <path d="M-9-13 0-21 9-13z" fill="#2f9a8a" ${O}/>
+    <path d="M-3-17q3-4 6 0" stroke="#c4442f" stroke-width="1.2" fill="none"/>
+    <circle cx="0" cy="-22.4" r="1.4" fill="#e36a92" ${O}/>`,
+  "ak-pandora": `<path d="M-19-9Q-15-18-6-16-3-10-7-4-14-3z" fill="#6e7f8a" ${O}/>
+    <path d="M-19-9Q-15-18-6-16" stroke="#4f9a45" stroke-width="2.2" fill="none"/>
+    <path d="M2-13Q7-24 17-20 20-13 15-7 7-6z" fill="#7d8e99" ${O}/>
+    <path d="M2-13Q7-24 17-20" stroke="#4f9a45" stroke-width="2.2" fill="none"/>
+    <path d="M-15-4Q-13 3-15 8M-10-4q1 6-1 12M8-7q1 7-1 15M13-7q-1 7 1 15" stroke="#3f7a3a" stroke-width=".9" fill="none"/>
+    <circle cx="-13" cy="0" r=".9" fill="#7ee8ff"/><circle cx="-10.3" cy="3" r=".9" fill="#c77dff"/><circle cx="8" cy="-1" r=".9" fill="#7ee8ff"/><circle cx="13" cy="2" r=".9" fill="#c77dff"/><circle cx="12.6" cy="6" r=".9" fill="#7ee8ff"/>
+    ${shadow(14)}<path d="M-6 8q2-5 6-5t6 5z" fill="#4f9a45" ${O}/>`,
+  "ak-africa": `${shadow(19)}
+    <path d="M-2 8Q-1-3-6-9M1 8q0-9 5-14" stroke="#7a5337" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <path d="M-19-9q10-6 19-4 9-2 18 3-9 3-18 1-10 2-19 0z" fill="#6b9a4a" ${O}/>
+    <path d="M-15-12q8-5 15-3 8-1 14 2" stroke="#5a8a3d" stroke-width=".8" fill="none"/>
+    <path d="M-17 8V1h8V8z" fill="#d9b07a" ${O}/><path d="M-18.5 1-13-4.5-7.5 1z" fill="#c9a256" ${O}/>
+    <path d="M-14 8V4h2v4z" fill="#2a241e"/>`,
+  "ak-asia": `${shadow(19)}
+    <path d="M-19 8-6-17-1-10 3-19 19 8z" fill="#8c8f96" ${O}/>
+    <path d="M-10.5-9-6-17-1.5-9.5-4-8-6-10.5-8.5-7.5zM-1-10 3-19l5.5 9.5-3 1.5-2.5-3-2.5 2.5z" fill="#fbfbfd" ${O}/>
+    <path d="M-12 8V2h9V8z" fill="#c4442f" ${O}/>
+    <path d="M-14 2Q-7.5-.5-1 2L-3.5-.8h-8z" fill="#d6a741" ${O}/>
+    <path d="M-10.5-.8V-3h6v2.2" fill="#c4442f" ${O}/>
+    <path d="M-12-3Q-7.5-5-3-3L-7.5-6z" fill="#d6a741" ${O}/>
+    <path d="M-9 8V5h3v3z" fill="#2a241e"/>`,
+  "ak-dinoland": `${shadow(19)}
+    <path d="M-17 7q-1-8 5-9h12q4-4 5-11 1-4 4-4 3 0 3 3t-3 3q-2 1-2 7 0 5-4 9l1 2h-3l-1-2h-8l-1 2h-3l-1-2q-3 2-4 2z" fill="#e0893a" ${O}/>
+    <circle cx="10.6" cy="-12.2" r=".7" fill="#2a241e"/>
+    <path d="M-12 1q2-2 4 0M-6 1q2-2 4 0" stroke="#b86a28" stroke-width=".7" fill="none"/>
+    <path d="M-19 7q-2-1-3-3" stroke="#e0893a" stroke-width="2" stroke-linecap="round"/>`,
+};
+
 
 export function spaceshipEarth() {
   // Geodesic sphere on a tripod — drawn at its own scale (radius 16).

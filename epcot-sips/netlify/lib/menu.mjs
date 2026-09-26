@@ -1,7 +1,8 @@
 // Shared menu helpers: storage, normalization, stable ids, and "is a refresh due?" logic.
 import { getStore } from "@netlify/blobs";
 import { BOOTHS as SEED_BOOTHS, FESTIVAL as SEED_FESTIVAL, NEXT_FESTIVAL as SEED_NEXT } from "../../data/drinks.mjs";
-import { ANCHOR_IDS, COUNTRY_IDS, COUNTRY_HOME, TYPES } from "../../data/places.mjs";
+import { COUNTRY_IDS, COUNTRY_HOME, TYPES } from "../../data/places.mjs";
+import { ALL_ANCHORS, OTHER_PARK_IDS, PARK_META, anchorIdsFor, parkSeed } from "../../data/parks.mjs";
 
 export const store = () => getStore({ name: "epcot-sips", consistency: "strong" });
 
@@ -31,14 +32,20 @@ export function festivalId(f) {
   return `${short}-${f.year || (f.starts || "").slice(0, 4)}`;
 }
 
-/** Validate + clean booths coming from the seed file or from Claude. */
-export function cleanBooths(booths, { yearRound = false } = {}) {
+/** Validate + clean booths coming from the seed files or from Claude. park: which park's map spots are allowed. */
+export function cleanBooths(booths, { yearRound = false, park = "epcot" } = {}) {
+  const anchorIds = anchorIdsFor(park);
+  const epcot = park === "epcot";
+  // Outside EPCOT a booth may give just its land (as an id or in "where") instead of an exact spot.
+  const landOf = (b) => anchorIds.find((id) => ALL_ANCHORS[id].kind === "land" && [b.land, b.where].some((w) => w && [id, slug(ALL_ANCHORS[id].name), slug(ALL_ANCHORS[id].short)].includes(slug(w))));
   const out = [];
   for (const b of Array.isArray(booths) ? booths : []) {
     const name = str(b.name, 80);
     if (!name) continue;
-    const country = COUNTRY_IDS.includes(b.country) ? b.country : "park";
-    let anchor = ANCHOR_IDS.includes(b.anchor) ? b.anchor : COUNTRY_HOME[country] || "showcase-plaza";
+    const country = epcot && COUNTRY_IDS.includes(b.country) ? b.country : "park";
+    let anchor = anchorIds.includes(b.anchor) ? b.anchor
+      : epcot ? COUNTRY_HOME[country] || "showcase-plaza"
+      : landOf(b) || PARK_META[park].home;
     const drinks = [];
     for (const d of Array.isArray(b.drinks) ? b.drinks : []) {
       const row = Array.isArray(d) ? { name: d[0], price: d[1], type: d[2], desc: d[3] } : d;
@@ -53,7 +60,7 @@ export function cleanBooths(booths, { yearRound = false } = {}) {
     }
     if (!drinks.length) continue;
     out.push({
-      name, country, anchor,
+      name, country, anchor, park,
       where: str(b.where, 90),
       opens: isoDate(b.opens), closes: isoDate(b.closes),
       yearRound: yearRound || !!b.yearRound,
@@ -70,14 +77,16 @@ export function flatten(booths, prefix) {
   const out = [];
   for (const b of booths) {
     for (const d of b.drinks) {
-      const base = b.yearRound ? `yr--${b.country}--${slug(d.name)}` : `${prefix}--${b.country}--${slug(d.name)}`;
+      const park = b.park || "epcot";
+      const base = park !== "epcot" ? `${park}--${slug(b.anchor.slice(park.length + 1))}--${slug(d.name)}`
+        : b.yearRound ? `yr--${b.country}--${slug(d.name)}` : `${prefix}--${b.country}--${slug(d.name)}`;
       let id = base;
       if (seen.has(id)) id = `${base}--${slug(b.name)}`;
       let n = 2;
       while (seen.has(id)) id = `${base}--${n++}`;
       seen.add(id);
       out.push({
-        id, ...d,
+        id, ...d, park,
         country: b.country, anchor: b.anchor, booth: b.name, where: b.where,
         opens: b.opens, closes: b.closes, yearRound: b.yearRound, note: b.note,
       });
@@ -109,16 +118,28 @@ export function seedYearRound() {
   };
 }
 
+export function seedPark(id) {
+  const seed = parkSeed(id);
+  return {
+    booths: cleanBooths(seed.booths, { yearRound: true, park: id }),
+    sources: seed.sources || [],
+    checkedAt: `${seed.checked}T12:00:00Z`,
+    origin: "seed",
+  };
+}
+
 export async function readMenus(s = store()) {
-  const [fest, yr] = await Promise.all([
+  const [fest, yr, ...others] = await Promise.all([
     s.get("menu/festival", { type: "json" }),
     s.get("menu/yearround", { type: "json" }),
+    ...OTHER_PARK_IDS.map((id) => s.get(`menu/park/${id}`, { type: "json" })),
   ]);
-  return { fest: fest || seedFestival(), yr: yr || seedYearRound() };
+  const parks = Object.fromEntries(OTHER_PARK_IDS.map((id, i) => [id, others[i] || seedPark(id)]));
+  return { fest: fest || seedFestival(), yr: yr || seedYearRound(), parks };
 }
 
 /** Which refresh jobs should run now, and why. */
-export function dueJobs({ fest, yr }, now = new Date()) {
+export function dueJobs({ fest, yr, parks = {} }, now = new Date()) {
   const today = todayET(now);
   const jobs = [];
   const reasons = [];
@@ -130,6 +151,10 @@ export function dueJobs({ fest, yr }, now = new Date()) {
 
   const yAge = yr.checkedAt ? daysBetween(yr.checkedAt.slice(0, 10), today) : Infinity;
   if (yAge >= YEAR_ROUND_DAYS) { jobs.push("yearround"); reasons.push(yr.checkedAt ? `year-round list is ${yAge} days old` : "year-round list never researched"); }
+  for (const [id, m] of Object.entries(parks)) {
+    const pAge = m?.checkedAt ? daysBetween(m.checkedAt.slice(0, 10), today) : Infinity;
+    if (pAge >= YEAR_ROUND_DAYS) { jobs.push(`park:${id}`); reasons.push(`${PARK_META[id].short} menu is ${pAge} days old`); }
+  }
   return { jobs, reason: reasons.join("; ") };
 }
 
@@ -173,9 +198,11 @@ export async function triggerRefresh({ siteUrl, jobs, reason, manual = false }) 
 }
 
 // Remember the day each drink first appeared, so the app can badge "New".
-export async function markFirstSeen(s, drinks) {
+// baseline: the first time a park's list is ever marked, nothing on it counts as new.
+export async function markFirstSeen(s, drinks, { baseline = false } = {}) {
   const seen = (await s.get("menu/firstseen", { type: "json" })) || {};
-  const today = todayET();
+  const first = baseline && !drinks.some((d) => seen[d.id]);
+  const today = first ? "2000-01-01" : todayET();
   let changed = false;
   for (const d of drinks) if (!seen[d.id]) { seen[d.id] = today; changed = true; }
   if (changed) await s.setJSON("menu/firstseen", seen);

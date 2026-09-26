@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
   <title>Epcot Sips</title>
-  <meta name="description" content="Our family's drink passport for EPCOT — always-current festival menus on a live park map" />
+  <meta name="description" content="Our family's drink passport for Walt Disney World — EPCOT festival menus plus Magic Kingdom, Hollywood Studios and Animal Kingdom drinks on live park maps" />
   <meta name="theme-color" content="#15181b" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -19,7 +19,7 @@
 </head>
 <body data-tab="map">
   <header class="top">
-    <span class="brand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="11" r="7.5"/><path d="M4.5 11h15M5.5 7.3h13M5.5 14.7h13M12 3.5 7.6 11 12 18.5 16.4 11z"/><path d="M8 18.5 6.5 21.5M16 18.5l1.5 3M12 18.5v3"/></svg></span>
+    <button class="brand park-btn" id="parkBtn" aria-label="Switch park"></button>
     <button class="fest" id="festBtn" aria-label="Festival and menu info">
       <span class="eyebrow">Epcot Sips</span>
       <span class="fest-name" id="festName">Loading…</span>
@@ -30,9 +30,9 @@
   </header>
 
   <!-- MAP -->
-  <section id="mapView" class="map-view" aria-label="EPCOT map">
+  <section id="mapView" class="map-view" aria-label="Park map">
     <div id="mapStage" class="map-stage">
-      <svg id="map" role="img" aria-label="Map of EPCOT with drink locations"></svg>
+      <svg id="map" role="img" aria-label="Park map with drink locations"></svg>
       <div id="overlay" class="map-overlay"></div>
     </div>
     <div class="map-ui" id="mapFilters"></div>
@@ -45,9 +45,11 @@
     <svg class="compass" viewBox="-26 -26 52 52" aria-label="North is at the bottom" role="img">
       <circle r="24" fill="#fbf7ec" stroke="#15181b" stroke-width="1.5"/>
       <circle r="19.5" fill="none" stroke="#15181b" stroke-width=".6" stroke-dasharray="1 2.2"/>
-      <path d="M0 11 3.6 0 0-17-3.6 0z" fill="#15181b"/><path d="M0 11 3.6 0h-7.2z" fill="#a3263a"/>
-      <path d="M-17 0 0-2.6 17 0 0 2.6z" fill="#8a8f96"/>
-      <text y="17.5" text-anchor="middle" dominant-baseline="central" font-family="Barlow Condensed, sans-serif" font-weight="800" font-size="8" fill="#a3263a">N</text>
+      <g id="compassRose">
+        <path d="M0 11 3.6 0 0-17-3.6 0z" fill="#15181b"/><path d="M0 11 3.6 0h-7.2z" fill="#a3263a"/>
+        <path d="M-17 0 0-2.6 17 0 0 2.6z" fill="#8a8f96"/>
+        <text y="17.5" text-anchor="middle" dominant-baseline="central" font-family="Barlow Condensed, sans-serif" font-weight="800" font-size="8" fill="#a3263a">N</text>
+      </g>
     </svg>
     <div class="scale" id="scale" aria-hidden="true"><span id="scaleT"></span><div class="bar" id="scaleBar"></div><small class="osm">© OpenStreetMap</small></div>
     <div id="drawer" class="drawer" data-state="peek">

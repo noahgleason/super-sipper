@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Family drink tracker for the EPCOT Food & Wine Festival — Netlify + Netlify Blobs",
+  "description": "Family drink tracker for the Walt Disney World parks (EPCOT festivals, Magic Kingdom, Hollywood Studios, Animal Kingdom) — Netlify + Netlify Blobs",
   "scripts": {
     "dev": "netlify dev"
   },

@@ -1,6 +1,6 @@
-// Main API for Epcot Sips. Shared family data + the auto-refreshed menu live in Netlify Blobs.
+// Main API for Epcot Sips (all four Walt Disney World theme parks). Shared family data + the auto-refreshed menu live in Netlify Blobs.
 //
-//   GET    /api/state            menu (current festival + year-round) + family check-ins + refresh status
+//   GET    /api/state            menus for every park (EPCOT festival + year-round, MK/HS/AK) + family check-ins + refresh status
 //   POST   /api/profile          create/update a family member
 //   POST   /api/checkin          tried / rating / wishlist / note for one drink
 //   POST   /api/drinks           add a drink the menu is missing
@@ -8,19 +8,20 @@
 //   POST   /api/status           mark a drink sold out today (clears itself tomorrow)
 //   POST   /api/refresh          re-research the menu now
 //   POST   /api/verify           check the family code
-//   POST   /api/unlock           check the refresh password → the claude.ai prompt for manual updates
-//   POST   /api/import           preview (dryRun) or save a menu pasted back from claude.ai
+//   POST   /api/unlock           check the refresh password → a claude.ai prompt per park for manual updates
+//   POST   /api/import           preview (dryRun) or save a menu pasted back from claude.ai (body.park picks the park)
 //   POST   /api/tab              set how many of a drink the family bought (per size) this visit
 //   POST   /api/visit/new        archive this visit (tried drinks, ratings, top-3 favorites), then start fresh
 //
 // Optional env vars: FAMILY_CODE (passcode for changes), EPCOT_SIPS_CLAUDE_KEY (your own Anthropic key;
 // enables "Refresh now"), REFRESH_CODE (password for "Refresh now"), AUTO_REFRESH=on (also refresh on a schedule), ANTHROPIC_MODEL, REFRESH_DAYS.
 
-import { ANCHORS, COUNTRIES, COUNTRY_IDS, RING, TYPES } from "../../data/places.mjs";
+import { COUNTRIES, COUNTRY_IDS, RING, TYPES } from "../../data/places.mjs";
+import { ALL_ANCHORS, PARK_META, PARKS, OTHER_PARK_IDS } from "../../data/parks.mjs";
 import {
   store, readMenus, flatten, festivalId, todayET, dueJobs, triggerRefresh, readStatus, REFRESH_DAYS, daysBetween, claudeKey, autoRefreshOn, markFirstSeen,
 } from "../lib/menu.mjs";
-import { buildPrompt, parseImport } from "../lib/manual.mjs";
+import { buildPrompt, buildParkPrompt, parseImport } from "../lib/manual.mjs";
 
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
@@ -54,7 +55,7 @@ async function getState(req) {
     s.get("menu/firstseen", { type: "json" }), readStatus(s),
     s.get("config/visit", { type: "json" }), listJSON(s, "visits/"), listJSON(s, "tab/"),
   ]);
-  const { fest, yr } = menus;
+  const { fest, yr, parks } = menus;
   const fid = festivalId(fest.festival);
 
   // Self-healing: if the scheduled check hasn't refreshed an overdue menu, start it now.
@@ -74,6 +75,7 @@ async function getState(req) {
   const drinks = [
     ...flatten(fest.booths, fid).map((d) => ({ ...d, source: "festival" })),
     ...flatten(yr.booths, "yr").map((d) => ({ ...d, source: "yearround" })),
+    ...OTHER_PARK_IDS.flatMap((id) => flatten(parks[id].booths, id).map((d) => ({ ...d, source: "yearround" }))),
     ...custom.filter((c) => c.festivalId === fid || c.festivalId === "yr" || !c.festivalId),
   ].map(decorate);
 
@@ -85,6 +87,7 @@ async function getState(req) {
     menu: {
       checkedAt: fest.checkedAt, origin: fest.origin, sources: fest.sources || [],
       yearRoundCheckedAt: yr.checkedAt, yearRoundSources: yr.sources || [],
+      parks: Object.fromEntries(OTHER_PARK_IDS.map((id) => [id, { checkedAt: parks[id].checkedAt, origin: parks[id].origin, sources: parks[id].sources || [] }])),
     },
     refresh: {
       ...refresh,
@@ -95,7 +98,8 @@ async function getState(req) {
       due: due.jobs, dueReason: due.reason, autoTrigger,
     },
     countries: COUNTRIES,
-    anchors: ANCHORS,
+    anchors: ALL_ANCHORS,
+    parks: PARK_META,
     ring: RING,
     types: TYPES,
     drinks,
@@ -163,6 +167,7 @@ export default async (req) => {
           name: clean(sn.name, 100), booth: clean(sn.booth, 80), price: clean(sn.price, 40),
           type: TYPES.includes(sn.type) ? sn.type : "cocktail",
           country: COUNTRY_IDS.includes(sn.country) ? sn.country : "park",
+          park: PARKS[sn.park] ? sn.park : "epcot",
           festival: clean(sn.festival, 80),
         };
       }
@@ -178,12 +183,13 @@ export default async (req) => {
       const name = clean(body.name, 90);
       if (!name) return json({ error: "Drink name is required" }, 400);
       const { fest } = await readMenus(s);
-      const country = COUNTRY_IDS.includes(body.country) ? body.country : "park";
-      const anchor = ANCHORS[body.anchor] ? body.anchor : null;
+      const park = PARKS[body.park] ? body.park : "epcot";
+      const country = park === "epcot" && COUNTRY_IDS.includes(body.country) ? body.country : "park";
+      const anchor = ALL_ANCHORS[body.anchor]?.park === park ? body.anchor : null;
       const id = `custom--${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
       const drink = {
-        id, name, country,
-        anchor: anchor || { usa: "america" }[country] || (ANCHORS[country] ? country : "showcase-plaza"),
+        id, name, country, park,
+        anchor: anchor || (park !== "epcot" ? PARK_META[park].home : { usa: "america" }[country] || (ALL_ANCHORS[country] ? country : "showcase-plaza")),
         type: TYPES.includes(body.type) ? body.type : "cocktail",
         price: (() => { const p = clean(body.price, 30); return p ? (/^\d/.test(p) ? `$${p}` : p) : null; })(),
         desc: clean(body.desc, 240),
@@ -216,13 +222,27 @@ export default async (req) => {
     if (method === "POST" && path === "unlock") {
       if (!refreshAllowed(req)) return json({ error: "Wrong password" }, 403);
       const { fest } = await readMenus(s);
-      return json({ ok: true, prompt: buildPrompt({ today: todayET(), current: fest.festival?.name ? `${fest.festival.name} ${fest.festival.year || ""}`.trim() : "" }) });
+      const today = todayET();
+      const prompts = { epcot: buildPrompt({ today, current: fest.festival?.name ? `${fest.festival.name} ${fest.festival.year || ""}`.trim() : "" }) };
+      for (const id of OTHER_PARK_IDS) prompts[id] = buildParkPrompt({ today, park: id });
+      return json({ ok: true, prompt: prompts.epcot, prompts });
     }
 
     if (method === "POST" && path === "import") {
       if (!refreshAllowed(req)) return json({ error: "Wrong password" }, 403);
       if (String(body.text || "").length > 2_000_000) return json({ error: "That file is too big (2 MB max)." }, 413);
-      const parsed = parseImport(body.text);
+      const park = PARKS[body.park] ? body.park : "epcot";
+      const parsed = parseImport(body.text, park);
+      if (park !== "epcot") {
+        const preview = { park, errors: parsed.errors, warnings: parsed.warnings, sources: parsed.sources?.length || 0, parkMenu: parsed.park ? { booths: parsed.park.booths.length, drinks: parsed.park.drinks } : null };
+        if (body.dryRun || !parsed.park) return json({ ok: !!parsed.park, saved: false, preview });
+        const now = new Date().toISOString();
+        const menu = { booths: parsed.park.booths, sources: parsed.sources, checkedAt: now, origin: "manual" };
+        await s.setJSON(`menu/park/${park}`, menu);
+        await markFirstSeen(s, flatten(menu.booths, park), { baseline: true });
+        await s.setJSON("refresh/status", { state: "ok", startedAt: now, finishedAt: now, jobs: [], reason: `uploaded by ${clean(body.member, 24) || "someone"}`, message: `Manual update · ${PARKS[park].short}: ${parsed.park.drinks} drinks`, manual: true });
+        return json({ ok: true, saved: true, preview });
+      }
       const preview = {
         errors: parsed.errors, warnings: parsed.warnings, sources: parsed.sources?.length || 0,
         festival: parsed.festival ? { ...parsed.festival.festival, nextFestival: parsed.festival.nextFestival, booths: parsed.festival.booths.length, drinks: parsed.festival.drinks } : null,
@@ -270,8 +290,8 @@ export default async (req) => {
         const d = byId[id], sn = it.snap || {};
         return {
           id, name: d?.name || sn.name || "A drink", booth: d?.booth || sn.booth || "", price: d?.price || sn.price || "",
-          type: d?.type || sn.type || "cocktail", country: d?.country || sn.country || "park",
-          festival: d ? (d.yearRound ? "Year-round" : festName) : sn.festival || "",
+          type: d?.type || sn.type || "cocktail", country: d?.country || sn.country || "park", park: d?.park || sn.park || "epcot",
+          festival: d ? (d.park && d.park !== "epcot" ? PARKS[d.park].short : d.yearRound ? "Year-round" : festName) : sn.festival || "",
           rating: it.rating || 0, note: it.note || "", at: it.at || null,
           buzz: Number.isFinite(it.buzz) ? it.buzz : null, buzzAt: it.buzzAt || null,
         };
@@ -327,7 +347,8 @@ export default async (req) => {
 
     if (method === "POST" && path === "refresh") {
       if (!refreshAllowed(req)) return json({ error: "Wrong refresh password" }, 403);
-      const jobs = Array.isArray(body.jobs) ? body.jobs.filter((j) => ["festival", "yearround"].includes(j)) : ["festival", "yearround"];
+      const allowed = ["festival", "yearround", ...OTHER_PARK_IDS.map((id) => `park:${id}`)];
+      const jobs = Array.isArray(body.jobs) ? body.jobs.filter((j) => allowed.includes(j)) : ["festival", "yearround"];
       const out = await triggerRefresh({ siteUrl: url.origin, jobs, reason: `requested by ${clean(body.member, 24) || "someone"}`, manual: true });
       return json(out, out.started ? 200 : 409);
     }

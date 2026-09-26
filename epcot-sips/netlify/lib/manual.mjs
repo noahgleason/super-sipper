@@ -1,7 +1,69 @@
 // Manual menu updates without an API key: the app hands you a prompt to paste into claude.ai,
 // and you upload the JSON reply. This file builds that prompt and validates the upload.
 import { ANCHORS, ANCHOR_IDS, COUNTRIES, COUNTRY_IDS, TYPES } from "../../data/places.mjs";
+import { ALL_ANCHORS, PARKS, anchorIdsFor } from "../../data/parks.mjs";
 import { cleanBooths } from "./menu.mjs";
+
+// What to be sure to cover at each park (the prompt already asks for everything).
+const PARK_HINTS = {
+  mk: `Magic Kingdom only pours alcohol at table-service restaurants (Be Our Guest, Cinderella's Royal Table, The Crystal Palace, The Plaza, Tony's Town Square, Liberty Tree Tavern, The Diamond Horseshoe, Jungle Navigation Co. Skipper Canteen) and The Beak and Barrel lounge. Also cover signature non-alcoholic drinks at quick-service spots, snack stands and carts: Aloha Isle and Sunshine Tree Terrace (DOLE Whip floats), Gaston's Tavern (LeFou's Brew), Cheshire Café, Golden Oak Outpost, Joffrey's carts, AstroFizz, Cool Ship, Main Street Bakery and so on.`,
+  hs: `Cover Star Wars: Galaxy's Edge (Oga's Cantina, Milk Stand, Docking Bay 7, Kat Saka's Kettle, Ronto Roasters), Toy Story Land (Woody's Lunch Box, Roundup Rodeo BBQ), BaseLine Tap House, The Hollywood Brown Derby and its Lounge, Tune-In Lounge and 50's Prime Time Café, Sci-Fi Dine-In Theater, Hollywood & Vine, ABC Commissary, Backlot Express, Oasis Canteen, Dockside Diner, Joffrey's and the carts.`,
+  ak: `Cover Nomad Lounge, Pandora (Pongu Pongu, Satu'li Canteen), Dawa Bar, Thirsty River Bar & Trek Snacks, Tusker House, Tiffins, Yak & Yeti (Restaurant, Quality Beverages, Local Food Cafés), Harambe Market, Kusafiri, Isle of Java, Warung Outpost, Flame Tree Barbecue, Satu'li, Terra Treats and the carts.`,
+};
+
+/** A prompt for one of the other parks: year-round (plus seasonal) drinks at every spot. */
+export function buildParkPrompt({ today, park }) {
+  const P = PARKS[park];
+  const spots = anchorIdsFor(park).map((id) => {
+    const a = ALL_ANCHORS[id];
+    return `  ${id} = ${a.name}${a.kind === "land" ? " (whole land: only for carts or spots not listed)" : a.land ? ` — ${ALL_ANCHORS[a.land]?.name}` : ""}`;
+  }).join("\n");
+  return `You are updating the drink menu for ${P.name} (Walt Disney World) in a family's phone app. Use web search.
+
+Today is ${today}.
+
+TASK
+List EVERY beverage currently served at ${P.name}: cocktails, beer, cider, wine by the glass, flights, and signature/specialty non-alcoholic drinks (floats, frozen drinks, specialty lemonades and slushes, specialty coffees, souvenir drinks, seasonal specials), at every bar, lounge, restaurant, quick-service spot, snack stand and cart.
+${PARK_HINTS[park] || ""}
+
+RULES
+- Accuracy over completeness. Only include drinks you found in a source. Never invent drinks or prices.
+- Best sources: touringplans.com park menus (they show a "Last verified" date; prefer ones from the last few weeks), disneyworld.disney.go.com, disneyparksblog.com, then recent disneyfoodblog.com, wdwnt.com, allears.net, wdwmagic.com articles.
+- Skip generic items: fountain sodas, bottled water, milk, juice boxes, plain brewed coffee and tea.
+- Skip drinks only sold at separately ticketed after-hours parties. Seasonal drinks anyone can buy are fine: set "closes" to the last day they're sold.
+- Keep prices exactly as published (e.g. "$14.00"). Use null if unknown.
+- Dates are YYYY-MM-DD.
+
+FIELD VALUES (use these ids exactly)
+type: ${TYPES.join(", ")}   (na = non-alcoholic, flight = any flight or pairing)
+
+anchor (where the drink is poured; pick the exact spot when it's listed, otherwise its land):
+${spots}
+
+OUTPUT
+Reply with ONLY one JSON object in a single \`\`\`json code block, no other text. Shape:
+
+{
+  "park": "${park}",
+  "booths": [
+    {
+      "name": "Exact location name",
+      "anchor": "${anchorIdsFor(park).find((id) => ALL_ANCHORS[id].kind === "venue") || anchorIdsFor(park)[0]}",
+      "where": "Land name",
+      "opens": null,
+      "closes": null,
+      "note": "",
+      "drinks": [
+        { "name": "Drink name", "price": "$14.00", "type": "cocktail", "desc": "Short ingredients/description" }
+      ]
+    }
+  ],
+  "sources": [ "https://…", "https://…" ]
+}
+
+- One booth per location. If a location has a seasonal list, make it a second booth with the same name plus " (Halloween)" or similar, and set "closes".
+- If the reply would be too long, keep going until the JSON is complete. It must be valid JSON.`;
+}
 
 export function buildPrompt({ today, current }) {
   const anchors = Object.entries(ANCHORS).map(([id, a]) => `  ${id} = ${a.name}`).join("\n");
@@ -64,7 +126,7 @@ const countDrinks = (booths) => booths.reduce((n, b) => n + b.drinks.length, 0);
 const isoDate = (v) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
 
 // Accepts the raw reply (code fences, stray text around it) and returns what would change.
-export function parseImport(raw) {
+export function parseImport(raw, park = "epcot") {
   const errors = [], warnings = [];
   let text = String(raw || "").trim();
   const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -91,6 +153,21 @@ export function parseImport(raw) {
 
   const sources = (Array.isArray(data.sources) ? data.sources : []).filter((u) => typeof u === "string" && /^https?:\/\//.test(u)).slice(0, 25);
   const out = { errors, warnings, sources };
+
+  if (park !== "epcot") {
+    const P = PARKS[park];
+    if (data.park && data.park !== park && PARKS[data.park]) errors.push(`This reply is for ${PARKS[data.park].short}, not ${P.short}. Switch parks in Settings and upload it there.`);
+    const list = data.booths || data.yearRoundBooths;
+    if (!Array.isArray(list)) { errors.push(`No "booths" list in the reply, so ${P.short} stays as it is.`); return out; }
+    const ids = anchorIdsFor(park);
+    const badAnchor = list.filter((b) => !ids.includes(b?.anchor)).length;
+    if (badAnchor) warnings.push(`${badAnchor} location${badAnchor > 1 ? "s" : ""} had an unknown map spot (placed on their land).`);
+    const booths = cleanBooths(list, { yearRound: true, park });
+    const n = countDrinks(booths);
+    if (n < 15) errors.push(`Only ${n} drinks came through for ${P.short} (need at least 15), so its menu wasn't replaced.`);
+    else if (!errors.length) out.park = { booths, drinks: n };
+    return out;
+  }
 
   if (Array.isArray(data.festivalBooths)) {
     audit(data.festivalBooths, "Festival");

@@ -1,7 +1,6 @@
 // Epcot Sips — front end (vanilla JS, no build step)
 
-import { icon, flag, flagBody, TYPE_ICON, LANDMARKS, spaceshipEarth, AVATARS, avatar } from "/icons.js";
-import { MAP } from "/map-data.js";
+import { icon, flag, flagBody, TYPE_ICON, LANDMARKS, LAND_ART, heroArt, parkGlyph, spaceshipEarth, AVATARS, avatar } from "/icons.js";
 
 const TYPE_LABEL = {
   beer: "Beer", cider: "Cider", wine: "Wine", sparkling: "Bubbly", cocktail: "Cocktail",
@@ -19,9 +18,10 @@ const TYPE_GROUPS = [
 ];
 const ONLY = [["all", "Anything", null], ["open", "Open now", "clock"], ["new", "New this week", "sparkle"], ["untried", "Haven't tried", "check"], ["want", "Wishlist", "heart"]];
 const typeChip = (t) => `${icon(TYPE_ICON[t] || "glass")}${TYPE_LABEL[t] || t}`;
-const LS = { me: "sips.me", code: "sips.code", rcode: "sips.refreshCode", cache: "sips.cache2", tab: "sips.tab", fopen: "sips.filtersOpen" };
+const LS = { me: "sips.me", code: "sips.code", rcode: "sips.refreshCode", cache: "sips.cache2", tab: "sips.tab", fopen: "sips.filtersOpen", park: "sips.park" };
 
-// Walking order used by the List ("walk the loop") and to order spots.
+// EPCOT's walking order, used by the List ("walk the loop") and to order spots. The other parks
+// bring their own (D().parks[id].walk).
 const WALK = [
   "spaceship-earth", "creations", "connections", "communicore", "guardians", "mission-space", "test-track", "odyssey", "east-walkway",
   "plaza-mexico-side", "port-of-entry", "mexico", "mexico-norway", "norway", "norway-china", "china", "china-germany", "germany",
@@ -42,6 +42,7 @@ const state = {
   me: ls.get(LS.me),
   code: ls.get(LS.code, ""),
   tab: ls.get(LS.tab, "map"),
+  park: ls.get(LS.park, "epcot"),  // which park the map and menu show (EPCOT by default)
   offline: false,
   sel: null,                 // selected map anchor
   drawer: "peek",
@@ -110,7 +111,12 @@ const members = () => D()?.members || [];
 const myRec = () => members().find((m) => state.me && m.name.toLowerCase() === state.me.name.toLowerCase());
 const myItem = (id) => myRec()?.items?.[id] || {};
 const countryOf = (id) => D().countries.find((c) => c.id === id) || { id, name: id };
-const pavCountry = (anchor) => (anchor === "america" ? "usa" : anchor);
+// Parks: every drink and map spot belongs to one ("epcot" when older data doesn't say).
+const parkOf = (d) => d?.park || "epcot";
+const PARK_FALLBACK = { id: "epcot", name: "EPCOT", short: "EPCOT", walk: null, home: "showcase-plaza", accent: ["#1f5fa8", "#c9982e"] };
+const PK = (id = state.park) => D()?.parks?.[id] || PARK_FALLBACK;
+const parkList = () => Object.values(D()?.parks || { epcot: PARK_FALLBACK });
+const walkOrder = () => (state.park === "epcot" ? WALK : PK().walk || []);
 const anchorOf = (id) => D().anchors[id];
 const drinkById = (id) => D().drinks.find((d) => d.id === id);
 
@@ -142,7 +148,8 @@ function memberItems(rec) {
       id, it, current: !!d,
       name: d?.name || snap.name || "A drink", booth: d?.booth || snap.booth || "", price: d?.price || snap.price || "",
       type: d?.type || snap.type || "cocktail", country: d?.country || snap.country || "park",
-      festival: d ? (d.yearRound ? "Year-round" : festLabel()) : snap.festival || "Earlier visit",
+      festival: d ? (parkOf(d) !== "epcot" ? PK(parkOf(d)).short : d.yearRound ? "Year-round" : festLabel()) : snap.festival || "Earlier visit",
+      park: d ? parkOf(d) : snap.park || "epcot",
       d,
     };
   });
@@ -157,8 +164,10 @@ const stampsFor = (rec) => new Set(memberItems(rec).filter((x) => x.it.tried && 
 
 function passesFilters(d) {
   const f = state.filters;
-  if (!f.fest && (d.source === "festival" || (d.source === "family" && !d.yearRound))) return false;
-  if (!f.yr && (d.source === "yearround" || (d.source === "family" && d.yearRound))) return false;
+  if (parkOf(d) !== state.park) return false;
+  // The festival / year-round switches only exist in EPCOT.
+  if (state.park === "epcot" && !f.fest && (d.source === "festival" || (d.source === "family" && !d.yearRound))) return false;
+  if (state.park === "epcot" && !f.yr && (d.source === "yearround" || (d.source === "family" && d.yearRound))) return false;
   const g = TYPE_GROUPS.find((x) => x[0] === f.group);
   if (g?.[2] && !g[2].includes(d.type)) return false;
   if (f.only === "open" && !isOpen(d)) return false;
@@ -176,7 +185,12 @@ const visibleDrinks = () => D().drinks.filter((d) => !d.hidden && passesFilters(
 // ── Festival theming & header ─────────────────────────────────────────────
 function applyTheme() {
   const n = (D().festival?.active ? D().festival.name : D().nextFestival?.name || "").toLowerCase();
-  let a = "#1f5fa8", b = "#c9982e";
+  let [a, b] = PK().accent || PARK_FALLBACK.accent;
+  if (state.park !== "epcot") {
+    document.documentElement.style.setProperty("--accent", a);
+    document.documentElement.style.setProperty("--accent-2", b);
+    return;
+  }
   if (n.includes("food")) { a = "#a3263a"; b = "#c9982e"; }
   else if (n.includes("holiday")) { a = "#b3202f"; b = "#2f8a5a"; }
   else if (n.includes("art")) { a = "#6b3fa0"; b = "#d9a11f"; }
@@ -196,9 +210,15 @@ function ago(iso) {
 }
 
 function renderHeader() {
-  const { festival: f, nextFestival: nf, today, menu, refresh } = D();
+  const { festival: f, nextFestival: nf, today, refresh } = D();
+  const menu = state.park === "epcot" ? D().menu : D().menu.parks?.[state.park] || {};
   let name, meta;
-  if (f?.active) {
+  $("#parkBtn").innerHTML = `<svg viewBox="-25 -29 50 41" aria-hidden="true">${parkGlyph(state.park)}</svg>${icon("chevron", "chev")}`;
+  if (state.park !== "epcot") {
+    const ds = D().drinks.filter((d) => parkOf(d) === state.park && !d.hidden);
+    name = PK().short;
+    meta = `${ds.length} drinks · ${new Set(ds.map((d) => d.anchor)).size} spots`;
+  } else if (f?.active) {
     const day = Math.round((Date.parse(today) - Date.parse(f.starts)) / 864e5) + 1;
     const len = Math.round((Date.parse(f.ends) - Date.parse(f.starts)) / 864e5) + 1;
     name = shortFest(f.name);
@@ -210,8 +230,8 @@ function renderHeader() {
     name = "EPCOT World Showcase";
     meta = nf?.name ? `Next: ${shortFest(nf.name)}${nf.starts ? ` · ${fmtDate(nf.starts)}` : ""}` : "Year-round drinks";
   }
-  const busy = refresh?.state === "running" || refresh?.state === "queued";
-  const stale = !menu?.checkedAt || (Date.now() - Date.parse(menu.checkedAt)) / 864e5 > (refresh?.everyDays || 3) + 1;
+  const busy = (refresh?.state === "running" || refresh?.state === "queued") && (refresh.jobs || []).some((j) => (state.park === "epcot" ? !j.startsWith("park:") : j === `park:${state.park}`));
+  const stale = !menu?.checkedAt || (Date.now() - Date.parse(menu.checkedAt)) / 864e5 > (state.park === "epcot" ? (refresh?.everyDays || 3) + 1 : 22);
   $("#festName").textContent = name;
   $("#festMeta").innerHTML = `<span>${esc(meta)}</span><span class="fresh ${busy ? "busy" : stale ? "stale" : ""}">${busy ? "updating menu…" : `menu ${ago(menu?.checkedAt)}`}</span>`;
   $("#meAvatar").innerHTML = state.me ? avatar(state.me.emoji) : `<span class="avatar">${icon("user")}</span>`;
@@ -221,16 +241,24 @@ function renderHeader() {
 // ── Render root ───────────────────────────────────────────────────────────
 function render() {
   if (!D()) return;
+  if (!D().parks?.[state.park]) state.park = "epcot";   // older cached data, or a park that went away
   applyTheme();
   document.body.dataset.tab = state.tab;
   document.body.dataset.drawer = state.drawer;
   renderHeader();
+  // The map for the current park is always kept built (the list and "closest to me" use it too).
+  const sig = [state.park, D().menu.checkedAt, D().menu.yearRoundCheckedAt, D().menu.parks?.[state.park]?.checkedAt].join("|");
+  const was = { ...stageSize };
+  if (mapBuiltFor !== sig) {
+    if (!MAPS[state.park]) {
+      loadMap(state.park).then(() => render()).catch(() => toast("Couldn't load the map. Check your connection."));
+      if (state.tab === "map") return;
+    } else { MAP = MAPS[state.park]; measureStage(); buildMap(); mapBuiltFor = sig; }
+  }
   if (state.tab === "map") {
-    const sig = D().menu.checkedAt + "|" + D().menu.yearRoundCheckedAt;
-    const was = { ...stageSize };
+    if (!geo || geo.park !== state.park) return;
     measureStage();
-    if (mapBuiltFor !== sig) { buildMap(); mapBuiltFor = sig; }
-    else if (was.W !== stageSize.W || was.H !== stageSize.H) fitMap();
+    if (was.W !== stageSize.W || was.H !== stageSize.H) fitMap();
     renderLayers();
     renderMarkers();
     renderDrawer();
@@ -251,13 +279,24 @@ function render() {
 //  MAP
 // ══════════════════════════════════════════════════════════════════════════
 const NS = "http://www.w3.org/2000/svg";
-let geo = null;          // projection + shapes
+let geo = null;          // projection + shapes for the park on screen
 let vb = null;           // current viewBox {x, y, w, h}
 let fitVB = null;
 let view = null;          // what is on screen right now (may differ from vb mid-gesture)
+let MAP = null;           // footprints of the park on screen (public/maps/<park>.js)
+const MAPS = {};
 
+// Each park's footprints load on demand (they're ~150–200 KB apiece).
+async function loadMap(park) {
+  if (!MAPS[park]) MAPS[park] = (await import(`/maps/${park}.js`)).MAP;
+  return MAPS[park];
+}
+
+// Meters from the park's origin, north-up turned by the park's rot (the same math as scripts/build-map.mjs).
 function project(lat, lng) {
-  return { x: -(lng - geo.lng0) * Math.cos(geo.lat0 * Math.PI / 180) * 111320, y: (lat - geo.lat0) * 110540 };
+  const O = MAP.origin, r = MAP.rot * Math.PI / 180;
+  const E = (lng - O.lng) * Math.cos(O.lat * Math.PI / 180) * 111320, N = (lat - O.lat) * 110540;
+  return { x: E * Math.cos(r) + N * Math.sin(r), y: E * Math.sin(r) - N * Math.cos(r) };
 }
 function smooth(pts, closed) {
   // Catmull-Rom → cubic Bézier
@@ -279,9 +318,9 @@ const el = (tag, attrs = {}, parent) => {
   return e;
 };
 // ── Day / night ────────────────────────────────────────────────────────────
-// Sun altitude (degrees) over EPCOT, from the standard low-precision solar formulas.
-// Works from UTC, so the sky follows EPCOT's sunset no matter what time zone the phone is in.
-function sunAltitude(date = new Date(), lat = MAP.origin.lat, lng = MAP.origin.lng) {
+// Sun altitude (degrees) over the park, from the standard low-precision solar formulas.
+// Works from UTC, so the sky follows Orlando's sunset no matter what time zone the phone is in.
+function sunAltitude(date = new Date(), lat = MAP?.origin.lat ?? 28.37, lng = MAP?.origin.lng ?? -81.55) {
   const rad = Math.PI / 180, d = (date.getTime() - 946728000000) / 86400000; // days since J2000
   const g = (357.529 + 0.98560028 * d) * rad;
   const L = (280.459 + 0.98564736 * d + 1.915 * Math.sin(g) + 0.02 * Math.sin(2 * g)) * rad;
@@ -291,7 +330,7 @@ function sunAltitude(date = new Date(), lat = MAP.origin.lat, lng = MAP.origin.l
   const ha = (gmst * 15 + lng) * rad - ra;
   return Math.asin(Math.sin(lat * rad) * Math.sin(dec) + Math.cos(lat * rad) * Math.cos(dec) * Math.cos(ha)) / rad;
 }
-// "?sky=21:30" previews the map at that time today (EPCOT time).
+// "?sky=21:30" previews the map at that time today (Orlando time).
 function skyTime() {
   const m = /^(\d{1,2}):(\d{2})$/.exec(new URLSearchParams(location.search).get("sky") || "");
   if (!m) return new Date();
@@ -315,21 +354,27 @@ function applySky() {
 }
 setInterval(applySky, 60000);
 
+// Hero landmarks are drawn into the map itself, at world scale on their real footprint.
+const HERO_GLOW = { se: ["#e9f0ff", "#9d8cff", "#5a4dff", 70], castle: ["#fff3f8", "#f29ac4", "#7a6cff", 80], tower: ["#e8ffe0", "#9fd28a", "#3f7a55", 60], tree: ["#fff4d6", "#ffc46a", "#ff8a3c", 75] };
+
 function buildMap() {
-  const A = D().anchors, ring = D().ring, M = MAP.layers, L = MAP.labels;
-  geo = { lat0: MAP.origin.lat, lng0: MAP.origin.lng, pts: {} };
-  for (const [id, a] of Object.entries(A)) geo.pts[id] = project(a.lat, a.lng);
+  const A = D().anchors, M = MAP.layers;
+  const epcot = state.park === "epcot";
+  geo = { park: state.park, pts: {} };
+  for (const [id, a] of Object.entries(A)) if ((a.park || "epcot") === state.park) geo.pts[id] = project(a.lat, a.lng);
   const P = geo.pts;
   const xy = ([x, y]) => ({ x, y });
-  geo.center = xy(L.lagoon);
-  geo.entrance = { x: (L.tickets[0][0] + L.tickets[1][0]) / 2, y: (L.tickets[0][1] + L.tickets[1][1]) / 2 + 18 };
-  geo.gate = xy(L.gateway);
+  const water = MAP.labels.find((l) => l.cls === "water");
+  geo.center = xy(MAP.center);
+  geo.entrance = xy(MAP.entrance);
+  geo.gate = MAP.spots?.gateway ? xy(MAP.spots.gateway) : null;
+  const G = water ? water.at : MAP.center;
 
   const svg = $("#map");
   svg.innerHTML = "";
   const defs = el("defs", {}, svg);
   defs.innerHTML = `
-    <radialGradient id="lagoonG" cx="${L.lagoon[0]}" cy="${L.lagoon[1]}" r="380" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="var(--water-deep)"/><stop offset=".7" stop-color="var(--water)"/><stop offset="1" stop-color="var(--water-shallow)"/></radialGradient>
+    <radialGradient id="lagoonG" cx="${G[0]}" cy="${G[1]}" r="380" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="var(--water-deep)"/><stop offset=".7" stop-color="var(--water)"/><stop offset="1" stop-color="var(--water-shallow)"/></radialGradient>
     <pattern id="forestP" width="46" height="40" patternUnits="userSpaceOnUse">
       <rect width="46" height="40" fill="var(--forest)"/>
       <g fill="var(--forest-2)"><circle cx="8" cy="9" r="9"/><circle cx="30" cy="6" r="8"/><circle cx="20" cy="26" r="10"/><circle cx="42" cy="28" r="8"/><circle cx="2" cy="34" r="7"/></g>
@@ -340,6 +385,7 @@ function buildMap() {
       <g fill="var(--tree)"><circle cx="5" cy="5" r="5"/><circle cx="16" cy="4" r="4.4"/><circle cx="10" cy="14" r="5.4"/><circle cx="21" cy="15" r="4"/><circle cx="0" cy="17" r="3.6"/></g>
       <g fill="var(--tree-hi)" opacity=".8"><circle cx="3.6" cy="3.6" r="2.2"/><circle cx="14.8" cy="2.8" r="1.9"/><circle cx="8.4" cy="12.4" r="2.4"/><circle cx="19.8" cy="13.8" r="1.7"/></g>
     </pattern>
+    <pattern id="meadowP" width="14" height="12" patternUnits="userSpaceOnUse"><rect width="14" height="12" fill="var(--meadow)"/><path d="M2 4l1-2M9 9l1-2M11 3l1-2M5 10l1-2" stroke="var(--meadow-2)" stroke-width="1"/><circle cx="7" cy="5" r="1.6" fill="var(--tree)" opacity=".55"/></pattern>
     <pattern id="flowerP" width="5" height="5" patternUnits="userSpaceOnUse"><rect width="5" height="5" fill="var(--grass-2)"/><circle cx="1.3" cy="1.3" r=".9" fill="#e36a92"/><circle cx="3.8" cy="3.6" r=".8" fill="#f4cf55"/></pattern>
     <radialGradient id="seG" cx="35%" cy="30%" r="80%"><stop offset="0" stop-color="#fbfdff"/><stop offset=".45" stop-color="#c6ccd3"/><stop offset="1" stop-color="#6f7780"/></radialGradient>
     <radialGradient id="seShine" cx="30%" cy="25%" r="35%"><stop offset="0" stop-color="#fff" stop-opacity=".8"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
@@ -350,18 +396,22 @@ function buildMap() {
   const C = geo.center;
   const fill = (d, attrs) => d && el("path", { d, ...attrs }, world);
   const line = (d, w, color, extra = {}) => d && el("path", { d, fill: "none", stroke: color, "stroke-width": w, ...extra }, world);
-  el("rect", { x: C.x - 1600, y: C.y - 1600, width: 3200, height: 3200, fill: "url(#forestP)" }, world);
+  const cover = { x: C.x - 2000, y: C.y - 2000, width: 4000, height: 4000 };
+  el("rect", { ...cover, fill: "url(#forestP)" }, world);
   // Inside the park, anything that isn't garden, water or a building is walkable pavement.
   fill(M.park, { fill: "#2f5528", opacity: .45, transform: "translate(3 4)" });
   fill(M.park, { fill: "var(--pave)", stroke: "#3d6634", "stroke-width": 3 });
   fill(M.parking, { fill: "#d9d4c8" });
   line(M.road, 10, "#cfc8b6");
   line(M.service, 5, "#ddd4bf");
+  fill(M.meadow, { fill: "url(#meadowP)" });
   fill(M.garden, { fill: "var(--grass)", stroke: "var(--grass-edge)", "stroke-width": .5 });
   fill(M.flowers, { fill: "url(#flowerP)" });
   fill(M.forest, { fill: "url(#treesP)", stroke: "var(--tree-lo)", "stroke-width": .6 });
   fill(M.sand, { fill: "var(--shore)" });
-  // Water, with a sandy shore and the lagoon deepening toward the middle.
+  fill(M.rock, { fill: "var(--rock)", stroke: "var(--rock-edge)", "stroke-width": .8 });
+  line(M.track, 4, "var(--dirt)");
+  // Water, with a sandy shore and the main lake deepening toward the middle.
   fill(M.water, { fill: "none", stroke: "var(--shore)", "stroke-width": 3 });
   fill(M.water, { fill: "url(#lagoonG)", "fill-rule": "evenodd" });
   line(M.canal, 3, "var(--water)");
@@ -378,38 +428,46 @@ function buildMap() {
   fill(M.attr, { fill: "var(--bld-attr)", stroke: "var(--bld-attr-edge)", "stroke-width": .7 });
   fill(M.glass, { fill: "#cfe6ea", stroke: "#7fa9b3", "stroke-width": .6 });
   fill(M.roof, { fill: "var(--bld)", opacity: .75, stroke: "var(--bld-edge)", "stroke-width": .5, "stroke-dasharray": "1.5 1.2" });
-  // Monorail beam
+  // Railroad (sleepers, then rails) and the monorail beam
+  line(M.rail, 3.2, "#7a5a3c", { "stroke-dasharray": ".8 1.6", "stroke-linecap": "butt" }); line(M.rail, 1.1, "#5b5f63");
   line(M.monorail, 4, "#7f8890"); line(M.monorail, 2, "#c9ced3");
-  // Spaceship Earth (a 50 m sphere), drawn on its real footprint
-  const se = L.spaceshipEarth;
-  const sg = el("g", { transform: `translate(${se[0].toFixed(1)} ${se[1].toFixed(1)}) scale(1.6)` }, world);
-  sg.innerHTML = spaceshipEarth();
+  // The park's big landmark (Spaceship Earth, Cinderella Castle, Tower of Terror, Tree of Life)
+  const H = MAP.hero;
+  const hg = el("g", { transform: `translate(${H.at[0].toFixed(1)} ${H.at[1].toFixed(1)}) scale(${H.kind === "se" ? 1.6 : 1.9})` }, world);
+  hg.innerHTML = H.kind === "se" ? spaceshipEarth() : heroArt(H.kind);
 
-  // Day/night: the whole map is tinted by the real sun over EPCOT (see applySky), and after dark
-  // the pavilions, Spaceship Earth and the walkway lamps light up.
-  const cover = { x: C.x - 1600, y: C.y - 1600, width: 3200, height: 3200 };
+  // Day/night: the whole map is tinted by the real sun (see applySky), and after dark the
+  // pavilions and lands, the park's landmark and the walkway lamps light up.
   el("rect", { ...cover, class: "sky-warm" }, world);
   el("rect", { ...cover, class: "sky-dark" }, world);
   const lights = el("g", { class: "sky-lights" }, world);
+  const hc = HERO_GLOW[H.kind] || HERO_GLOW.se;
   lights.innerHTML = `<defs>
       <radialGradient id="glowWarm"><stop offset="0" stop-color="#ffd27a" stop-opacity=".75"/><stop offset=".45" stop-color="#ffb347" stop-opacity=".28"/><stop offset="1" stop-color="#ff9a3c" stop-opacity="0"/></radialGradient>
-      <radialGradient id="glowSE"><stop offset="0" stop-color="#e9f0ff" stop-opacity=".9"/><stop offset=".35" stop-color="#9d8cff" stop-opacity=".45"/><stop offset="1" stop-color="#5a4dff" stop-opacity="0"/></radialGradient>
+      <radialGradient id="glowHero"><stop offset="0" stop-color="${hc[0]}" stop-opacity=".9"/><stop offset=".35" stop-color="${hc[1]}" stop-opacity=".45"/><stop offset="1" stop-color="${hc[2]}" stop-opacity="0"/></radialGradient>
     </defs>`;
   const glowD = (d, w, color, op) => d && el("path", { d, fill: "none", stroke: color, "stroke-width": w, "stroke-dasharray": "0 22", opacity: op }, lights);
   el("path", { d: M.attr, fill: "#ffcf7a", opacity: .3 }, lights);
   el("path", { d: M.bld, fill: "#ffcf7a", opacity: .08 }, lights);
   glowD(M.walkW, 9, "#ffc86a", .22); glowD(M.walk, 8, "#ffc86a", .22);
   glowD(M.walkW, 2, "#fff1c4", 1); glowD(M.walk, 1.8, "#fff1c4", 1);
-  for (const [id, a] of Object.entries(A)) {
-    if (a.kind !== "pavilion" && a.kind !== "landmark" || id === "spaceship-earth") continue;
-    el("circle", { cx: P[id].x.toFixed(1), cy: P[id].y.toFixed(1), r: a.kind === "pavilion" ? 48 : 34, fill: "url(#glowWarm)" }, lights);
+  const glowR = { pavilion: 48, land: 44, landmark: 34, venue: 22 };
+  for (const [id, p] of Object.entries(P)) {
+    const r = glowR[A[id].kind];
+    if (!r || id === "spaceship-earth") continue;
+    el("circle", { cx: p.x.toFixed(1), cy: p.y.toFixed(1), r, fill: "url(#glowWarm)" }, lights);
   }
-  el("circle", { cx: se[0].toFixed(1), cy: se[1].toFixed(1), r: 70, fill: "url(#glowSE)" }, lights);
+  el("circle", { cx: H.at[0].toFixed(1), cy: H.at[1].toFixed(1), r: hc[3], fill: "url(#glowHero)" }, lights);
   applySky();
 
-  // Bounds → initial fit
-  const ids = [...ring, "spaceship-earth", "the-land", "mission-space"];
-  const xs = ids.map((i) => P[i].x), ys = ids.map((i) => P[i].y);
+  // Compass: the needle points to real north for this park's rotation.
+  $("#compassRose")?.setAttribute("transform", `rotate(${MAP.rot - 180})`);
+  $(".compass")?.setAttribute("aria-label", `North is ${{ 0: "at the top", 90: "to the right", 180: "at the bottom", 270: "to the left" }[MAP.rot] || "shown by the needle"}`);
+
+  // Bounds → initial fit: the drink spots, the landmark and the gates.
+  const ids = epcot ? [...D().ring, "spaceship-earth", "the-land", "mission-space"] : Object.keys(P);
+  const xs = [...ids.map((i) => P[i].x), ...(epcot ? [] : [H.at[0], geo.entrance.x])];
+  const ys = [...ids.map((i) => P[i].y), ...(epcot ? [] : [H.at[1], geo.entrance.y])];
   geo.bounds = { x0: Math.min(...xs) - 40, x1: Math.max(...xs) + 40, y0: Math.min(...ys) - 60, y1: Math.max(...ys) + 50 };
   fitMap();
   initPanZoom();
@@ -417,18 +475,18 @@ function buildMap() {
 
 // Map name labels, as an HTML overlay (they stay crisp and never scale).
 function areaLabelsHTML(S) {
-  const P = geo.pts, C = geo.center;
+  const P = geo.pts;
   let html = "";
   const add = (p, text, cls) => { html += `<div class="mlabel ${cls}" data-wx="${p.x.toFixed(1)}" data-wy="${p.y.toFixed(1)}"><span>${esc(text)}</span></div>`; };
-  add({ x: C.x, y: C.y - 8 }, "World Showcase", "water");
-  add({ x: C.x, y: C.y + 10 }, "Lagoon", "water sm");
+  for (const l of MAP.labels) l.text.forEach((t, i) => add({ x: l.at[0], y: l.at[1] + (l.text.length > 1 ? (i ? 10 : -8) : 0) }, t, `${l.cls}${i ? " sm" : ""}`));
+  add(geo.entrance, "Main Entrance", "gate");
+  if (state.park !== "epcot") return html;
   add({ x: P.communicore.x, y: P.communicore.y + 62 }, "World Celebration", "land");
   const mid = (a, b) => ({ x: (P[a].x + P[b].x) / 2, y: (P[a].y + P[b].y) / 2 });
   const lerp = (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
   add(lerp(P.communicore, mid("test-track", "mission-space"), 0.55), "World Discovery", "land");
   add(lerp(P.communicore, mid("the-land", "imagination"), 0.55), "World Nature", "land");
-  add({ x: geo.entrance.x, y: geo.entrance.y }, "Main Entrance", "gate");
-  add({ x: geo.gate.x, y: geo.gate.y + 12 }, "Int'l Gateway", "gate");
+  if (geo.gate) add({ x: geo.gate.x, y: geo.gate.y + 12 }, "Int'l Gateway", "gate");
   const small = [["test-track", "Test Track"], ["the-land", "The Land"], ["imagination", "Imagination!"], ["seas", "The Seas"], ["guardians", "Cosmic Rewind"], ["mission-space", "Mission: SPACE"], ["spaceship-earth", "Spaceship Earth"]];
   for (const [id, name] of small) {
     if (S[id] && id !== "spaceship-earth") continue;
@@ -437,18 +495,19 @@ function areaLabelsHTML(S) {
   return html;
 }
 
-// Group the visible drinks by anchor → map markers.
+// Group this park's drinks by map spot → markers. Outside EPCOT a land also collects every drink poured in it.
 function spots() {
   const by = {};
+  const keys = (d) => {
+    const a = d.anchor && anchorOf(d.anchor) ? d.anchor : PK().home;
+    const land = anchorOf(a)?.land;
+    return land ? [a, land] : [a];
+  };
   for (const d of D().drinks) {
-    if (d.hidden) continue;
-    const a = d.anchor && anchorOf(d.anchor) ? d.anchor : "showcase-plaza";
-    (by[a] ||= { id: a, all: [], vis: [] }).all.push(d);
+    if (d.hidden || parkOf(d) !== state.park) continue;
+    for (const k of keys(d)) (by[k] ||= { id: k, all: [], vis: [] }).all.push(d);
   }
-  for (const d of visibleDrinks()) {
-    const a = d.anchor && anchorOf(d.anchor) ? d.anchor : "showcase-plaza";
-    by[a].vis.push(d);
-  }
+  for (const d of visibleDrinks()) for (const k of keys(d)) by[k].vis.push(d);
   return by;
 }
 
@@ -456,6 +515,14 @@ function spots() {
 const zoomK = () => (fitVB && view ? fitVB.w / view.w : 1);
 const growPav = () => Math.max(0.9, Math.min(2.1, Math.pow(zoomK(), 0.55)));
 const growPin = () => Math.max(0.9, Math.min(1.5, Math.pow(zoomK(), 0.35)));
+// Outside EPCOT, individual bars and stands appear once you zoom in (or open their land).
+const VENUE_ZOOM = 1.7;
+const isBig = (a) => a?.kind === "pavilion" || a?.kind === "land";
+function venueShown(id, S) {
+  const a = anchorOf(id);
+  if (a.kind !== "venue") return !!S[id];
+  return !!S[id] && (zoomK() >= VENUE_ZOOM || state.sel === id || state.sel === a.land);
+}
 
 function renderMarkers() {
   const ov = $("#overlay");
@@ -464,18 +531,18 @@ function renderMarkers() {
   const pxPerM = stageSize.W / view.w;
   const S = spots();
   const rec = myRec();
-  const ordered = Object.keys(D().anchors).sort((a, b) => (D().anchors[a].kind === "pavilion") - (D().anchors[b].kind === "pavilion"));
-  const shown = ordered.filter((id) => S[id] || D().anchors[id].kind === "pavilion");
+  const ordered = Object.keys(geo.pts).sort((a, b) => isBig(anchorOf(a)) - isBig(anchorOf(b)));
+  const shown = ordered.filter((id) => isBig(anchorOf(id)) || venueShown(id, S));
   const gp = growPav(), gn = growPin();
   // Spread overlapping markers apart in screen space; the offsets ride along with zoom.
-  const base = shown.map((id) => { const p = geo.pts[id], pav = D().anchors[id].kind === "pavilion"; return { id, x: (p.x - view.x) * pxPerM, y: (p.y - view.y) * pxPerM, r: pav ? 25 * gp : 14 * gn, g: pav ? gp : gn }; });
+  const base = shown.map((id) => { const p = geo.pts[id], pav = isBig(D().anchors[id]); return { id, x: (p.x - view.x) * pxPerM, y: (p.y - view.y) * pxPerM, r: pav ? 25 * gp : 14 * gn, g: pav ? gp : gn }; });
   const disp = spread(base);
   const off = Object.fromEntries(base.map((b) => [b.id, { dx: (disp[b.id].x - b.x) / b.g, dy: (disp[b.id].y - b.y) / b.g }]));
   let html = areaLabelsHTML(S);
   for (const id of shown) {
     const a = D().anchors[id];
     const s = S[id];
-    const isPav = a.kind === "pavilion";
+    const isPav = isBig(a);
     if (!s && !isPav) continue;
     const p = geo.pts[id], o = off[id];
     const vis = s?.vis || [];
@@ -484,13 +551,13 @@ function renderMarkers() {
     const cls = `marker ${!vis.length ? "dim" : ""} ${state.sel === id ? "sel" : ""} ${tried ? "tried" : ""}`;
     const pos = `data-wx="${p.x.toFixed(1)}" data-wy="${p.y.toFixed(1)}" data-dx="${o.dx.toFixed(1)}" data-dy="${o.dy.toFixed(1)}"`;
     if (isPav) {
-      const name = a.name.replace("The American Adventure", "America").replace("United Kingdom", "U.K.");
+      const name = a.short || a.name.replace("The American Adventure", "America").replace("United Kingdom", "U.K.");
       const w = name.length * 5.6 + 14;
       html += `<div class="${cls}" data-anchor="${id}" data-kind="pav" ${pos} data-ox="40" data-oy="36" style="transform-origin:40px 36px">
         <svg width="80" height="66" viewBox="-40 -36 80 66">
         <circle r="30" cy="-4" class="hit"/>
         <circle r="25" cy="-6" class="sel-ring"/>
-        <g class="art">${LANDMARKS[id] || ""}</g>
+        <g class="art">${LANDMARKS[id] || LAND_ART[id] || ""}</g>
         <rect class="plate-bg" x="${-w / 2}" y="11" width="${w}" height="14"/>
         <text class="plate-t" y="18.3">${esc(name)}</text>
         ${vis.length ? `<rect class="tag ${allSoon ? "soon" : ""}" x="11" y="-30" width="17" height="15"/><text class="tag-t" x="19.5" y="-22.3">${vis.length}</text>` : ""}
@@ -532,6 +599,17 @@ function hideCrowdedLabels() {
   document.querySelectorAll("#overlay .mlabel:not(.water) span").forEach((t) => {
     t.style.visibility = boxes.some((b) => hit(t.getBoundingClientRect(), b)) ? "hidden" : "";
   });
+  // Booth names under pins: the spot with the most drinks keeps its name when two would collide.
+  const placed = [...document.querySelectorAll("#overlay .plate-bg")].map((p) => p.getBoundingClientRect());
+  const names = [...document.querySelectorAll("#overlay .booth-t")]
+    .map((t) => ({ t, n: +(t.closest(".marker").querySelector(".tag-t")?.textContent || 0), sel: t.closest(".marker").classList.contains("sel") }))
+    .sort((a, b) => b.sel - a.sel || b.n - a.n);
+  for (const { t } of names) {
+    const r = t.getBoundingClientRect();
+    const clash = placed.some((b) => hit(r, b));
+    t.style.visibility = clash ? "hidden" : "";
+    if (!clash) placed.push(r);
+  }
 }
 
 function typeIcon(ds) {
@@ -789,16 +867,18 @@ function selectSpot(id) {
   state.drawer = "half";
   render();
   // glide the spot into view above the drawer, zooming in a little if we're zoomed out
+  // (a bar or stand zooms in far enough for its neighbors' pins to show too)
   const p = geo.pts[id], { W, H } = stageSize;
-  const w = Math.min(view.w, fitVB.w / 1.5), h = w * H / W;
+  const w = Math.min(view.w, fitVB.w / (anchorOf(id)?.kind === "venue" ? VENUE_ZOOM * 1.15 : 1.5)), h = w * H / W;
   flyTo({ x: p.x - w / 2, y: p.y - 0.26 * h, w }, 420);
 }
 
 // ── Filters (collapsible; shared by the map and the menu list) ────────────
-const activeFilterCount = () => { const f = state.filters; return (f.group !== "all") + (f.only !== "all") + !f.fest + !f.yr; };
+const activeFilterCount = () => { const f = state.filters; return (f.group !== "all") + (f.only !== "all") + (state.park === "epcot" ? !f.fest + !f.yr : 0); };
 function filterSummary() {
   const f = state.filters, fest = D().festival;
-  const menus = [f.fest && fest?.name ? shortFest(fest.name).replace(/ Festival$/, "") : null, f.yr ? "Year-round" : null].filter(Boolean).join(" + ") || "No menus";
+  const menus = state.park !== "epcot" ? PK().short
+    : [f.fest && fest?.name ? shortFest(fest.name).replace(/ Festival$/, "") : null, f.yr ? "Year-round" : null].filter(Boolean).join(" + ") || "No menus";
   const g = TYPE_GROUPS.find((x) => x[0] === f.group), o = ONLY.find((x) => x[0] === f.only);
   return `<b>${esc(menus)}</b> · ${esc(f.group === "all" ? "All drinks" : g[1])}${f.only !== "all" ? ` · ${esc(o[1])}` : ""}`;
 }
@@ -809,10 +889,10 @@ function filterPanel() {
       <div class="fb-sum">${filterSummary()}</div>
     </div>
     <div class="filter-panel" ${open ? "" : "hidden"}><div class="fp-inner">
-      <div class="fp-sec"><h5>Menus ${n ? `<button data-freset>Reset all</button>` : ""}</h5><div class="switches">
+      ${state.park === "epcot" ? `<div class="fp-sec"><h5>Menus ${n ? `<button data-freset>Reset all</button>` : ""}</h5><div class="switches">
         ${fest?.name ? `<button class="switch ${f.fest ? "on" : ""}" data-layer="fest"><span>${esc(shortFest(fest.name))}<small>${fest.active ? `Festival booths · through ${fmtDate(fest.ends)}` : `Festival booths · starts ${fmtDate(fest.starts)}`}</small></span><span class="track"></span></button>` : ""}
         <button class="switch ${f.yr ? "on" : ""}" data-layer="yr"><span>Year-round drinks<small>Pavilion bars, carts &amp; restaurants</small></span><span class="track"></span></button>
-      </div></div>
+      </div></div>` : n ? `<div class="fp-sec"><h5>Filters <button data-freset>Reset all</button></h5></div>` : ""}
       <div class="fp-sec"><h5>Drink type</h5><div class="fp-grid">${TYPE_GROUPS.map(([k, l, , ic]) => `<button class="fp-type ${f.group === k ? "on" : ""}" data-group="${k}">${icon(ic)}${l}</button>`).join("")}</div></div>
       <div class="fp-sec"><h5>Show</h5><div class="seg">${ONLY.map(([k, l, ic]) => `<button class="${f.only === k ? "on" : ""}" data-only="${k}">${ic ? icon(ic) : ""}${l}</button>`).join("")}</div></div>
     </div></div>`;
@@ -827,12 +907,13 @@ function renderLayers() { $("#mapFilters").innerHTML = filterPanel(); }
 
 function spotArt(id, ds) {
   const a = anchorOf(id);
-  if (a?.kind === "pavilion" && LANDMARKS[id]) return `<span class="spot-art"><svg viewBox="-25 -29 50 41" aria-hidden="true">${LANDMARKS[id]}</svg></span>`;
+  const art = a?.kind === "pavilion" ? LANDMARKS[id] : a?.kind === "land" ? LAND_ART[id] : null;
+  if (art) return `<span class="spot-art"><svg viewBox="-25 -29 50 41" aria-hidden="true">${art}</svg></span>`;
   const first = ds?.[0];
   if (first && first.country !== "park") return `<span class="spot-art">${flag(first.country)}</span>`;
   return `<span class="spot-art">${icon(ds?.length ? typeIcon(ds) : "pin")}</span>`;
 }
-const walkMins = (id) => (state.me_pos && geo ? Math.max(1, Math.round(Math.hypot(geo.pts[id].x - state.me_pos.x, geo.pts[id].y - state.me_pos.y) / 80)) : null);
+const walkMins = (id) => (state.me_pos && geo?.pts[id] ? Math.max(1, Math.round(Math.hypot(geo.pts[id].x - state.me_pos.x, geo.pts[id].y - state.me_pos.y) / 80)) : null);
 
 function renderDrawer() {
   const body = $("#drawerBody");
@@ -850,7 +931,8 @@ function renderDrawer() {
         ${state.me_pos ? `<button class="peek-card" data-nearest>${icon("locate")}<span><b>Closest drink</b>to where you are</span></button>` : ""}
         ${fresh ? `<button class="peek-card" data-only-jump="new">${icon("sparkle")}<span><b>${fresh} new</b>this week</span></button>` : ""}
         ${top ? `<button class="peek-card" data-jump="${esc(top.d.anchor)}">${icon("star")}<span><b>${top.r.toFixed(1)} family pick</b>${esc(top.d.name)}</span></button>` : ""}
-        <button class="peek-card" data-tabjump="list">${icon("walk")}<span><b>Walk the loop</b>drinks in walking order</span></button>
+        <button class="peek-card" data-tabjump="list">${icon("walk")}<span><b>${state.park === "epcot" ? "Walk the loop" : "Walk the park"}</b>drinks in walking order</span></button>
+        <button class="peek-card" data-parks>${icon("map")}<span><b>Other parks</b>${esc(parkList().filter((p) => p.id !== state.park).map((p) => p.short).join(" · "))}</span></button>
       </div>`;
     return;
   }
@@ -861,7 +943,7 @@ function renderDrawer() {
   const booths = [];
   for (const d of list) {
     let b = booths.find((x) => x.name === d.booth);
-    if (!b) booths.push((b = { name: d.booth, where: d.where, note: d.note, yr: d.yearRound, drinks: [] }));
+    if (!b) booths.push((b = { name: d.booth, where: d.where, note: d.note, yr: d.yearRound && parkOf(d) === "epcot", anchor: d.anchor, closes: d.closes, drinks: [] }));
     b.drinks.push(d);
   }
   const mins = walkMins(state.sel);
@@ -870,7 +952,7 @@ function renderDrawer() {
       <p>${list.length} drink${list.length === 1 ? "" : "s"}${hidden > 0 ? ` · ${hidden} hidden by filters` : ""}${mins ? ` · ${icon("walk")} ~${mins} min` : ""}</p></div>
       <button class="x" data-closespot aria-label="Close">${icon("close")}</button></div>
     ${booths.map((b) => `
-      <p class="booth-name">${esc(b.name)}${b.yr ? ' <span class="chip">Year-round</span>' : ""}</p>
+      <p class="booth-name">${esc(b.name)}${b.yr ? ' <span class="chip">Year-round</span>' : ""}${b.anchor !== state.sel && anchorOf(b.anchor)?.kind === "venue" ? `<button class="linkbtn" data-jump="${esc(b.anchor)}">${icon("map")}Map</button>` : ""}</p>
       ${b.where ? `<p class="booth-where">${icon("pin")}${esc(b.where)}</p>` : ""}
       ${b.note ? `<div class="note">${esc(b.note)}</div>` : ""}
       <div class="drinks">${b.drinks.map((d) => drinkCard(d)).join("")}</div>`).join("")
@@ -879,6 +961,7 @@ function renderDrawer() {
 }
 
 // ── Geolocation ───────────────────────────────────────────────────────────
+const latLngDist = (a, b) => Math.hypot((a.lat - b.lat) * 110540, (a.lng - b.lng) * 111320 * Math.cos(a.lat * Math.PI / 180));
 function toggleLocate() {
   if (state.watching) {
     navigator.geolocation.clearWatch(state.watching);
@@ -889,10 +972,18 @@ function toggleLocate() {
   let first = true;
   state.watching = navigator.geolocation.watchPosition((pos) => {
     const { latitude: lat, longitude: lng } = pos.coords;
+    if (!geo || !MAP) return;
     const p = project(lat, lng);
     const far = Math.hypot(p.x - geo.center.x, p.y - geo.center.y);
+    // Standing in a different park? Switch the map to it.
+    const other = far > 900 && parkList().find((k) => k.id !== state.park && k.center && latLngDist(k.center, { lat, lng }) < 1100);
+    if (other) {
+      setPark(other.id);
+      toast(`You're at ${other.short} — showing its map`);
+      return;
+    }
     if (far > 1500) {
-      if (first) toast(`You're about ${(far / 1609).toFixed(far > 16000 ? 0 : 1)} mi from EPCOT — the dot will appear once you're in the park`);
+      if (first) toast(`You're about ${(far / 1609).toFixed(far > 16000 ? 0 : 1)} mi from ${PK().short} — the dot will appear once you're in the park`);
       state.me_pos = null;
     } else {
       state.me_pos = { ...p, lat, lng };
@@ -930,7 +1021,7 @@ function drinkCard(d, { showWhere = false } = {}) {
       <div class="drink-title"><h4>${esc(d.name)}</h4>${d.desc ? `<p class="desc">${esc(d.desc)}</p>` : ""}</div>
       <span class="price">${d.price ? esc(d.price) : '<span class="muted">—</span>'}</span>
     </div>
-    ${showWhere ? `<p class="where">${flag(d.country)}${esc(d.booth)}${d.where ? ` · ${esc(d.where)}` : ""}<button class="linkbtn" data-jump="${esc(d.anchor)}">${icon("map")}Map</button></p>` : ""}
+    ${showWhere ? `<p class="where">${flag(d.country)}${parkOf(d) !== state.park ? `<b>${esc(PK(parkOf(d)).short)}</b> · ` : ""}${esc(d.booth)}${d.where ? ` · ${esc(d.where)}` : ""}<button class="linkbtn" data-jump="${esc(d.anchor)}">${icon("map")}Map</button></p>` : ""}
     <div class="chips">${chips.join("")}</div>
     ${fam.length ? `<div class="fam-row"><span style="display:inline-flex">${fam.map((x) => avatar(x.m.emoji)).join("")}</span>
       <span>${fam.map((x) => esc(x.m.name) + (x.it.rating ? ` ${x.it.rating}★` : "")).join(", ")}</span></div>` : ""}
@@ -947,14 +1038,15 @@ function drinkCard(d, { showWhere = false } = {}) {
 function renderList() {
   const f = state.filters;
   const list = visibleDrinks();
-  const order = (a) => { const i = WALK.indexOf(a); return i < 0 ? 999 : i; };
+  const walk = walkOrder();
+  const order = (a) => { const i = walk.indexOf(a); return i < 0 ? 999 : i; };
   let body = "";
   if (f.sort === "walk" || f.sort === "near") {
     const groups = {};
     for (const d of list) (groups[d.anchor] ||= []).push(d);
     let keys = Object.keys(groups).sort((a, b) => order(a) - order(b));
-    if (f.sort === "near" && state.me_pos && geo) {
-      const dist = (id) => Math.hypot(geo.pts[id].x - state.me_pos.x, geo.pts[id].y - state.me_pos.y);
+    if (f.sort === "near" && state.me_pos && geo?.park === state.park) {
+      const dist = (id) => (geo.pts[id] ? Math.hypot(geo.pts[id].x - state.me_pos.x, geo.pts[id].y - state.me_pos.y) : 1e9);
       keys = keys.sort((a, b) => dist(a) - dist(b));
     }
     body = `<div class="stop">${keys.map((k) => {
@@ -974,13 +1066,13 @@ function renderList() {
   }
   return `
     <h2 class="section-title">The menu</h2>
-    <p class="section-sub">${esc(festLabel())} plus year-round pavilion drinks</p>
+    <p class="section-sub">${state.park === "epcot" ? `${esc(festLabel())} plus year-round pavilion drinks` : `${esc(PK().name)}: bars, restaurants, stands &amp; carts`} · <button class="linkbtn" data-parks>${icon("map")}Switch park</button></p>
     <div class="search-wrap">${icon("search")}<input class="search" id="q" type="search" placeholder="Search drinks, booths, ingredients…" value="${esc(f.q)}" autocomplete="off" /></div>
     <div class="list-filters">${filterPanel()}</div>
     <div class="count-row">
       <p class="count-line">${list.length} drink${list.length === 1 ? "" : "s"}</p>
       <select class="sort" id="sort" aria-label="Sort">
-        <option value="walk" ${f.sort === "walk" ? "selected" : ""}>Walk the loop</option>
+        <option value="walk" ${f.sort === "walk" ? "selected" : ""}>${state.park === "epcot" ? "Walk the loop" : "Walk the park"}</option>
         ${state.me_pos ? `<option value="near" ${f.sort === "near" ? "selected" : ""}>Closest to me</option>` : ""}
         <option value="price" ${f.sort === "price" ? "selected" : ""}>Cheapest first</option>
         <option value="rating" ${f.sort === "rating" ? "selected" : ""}>Family favorites</option>
@@ -1086,18 +1178,21 @@ function visitCard(v) {
 }
 
 const STAMP_INK = ["#f2c46a", "#f59a86", "#a9d4f2", "#b9e3a0", "#e3b5f0"];
-function stampSVG(c, got, i) {
+// Country stamps carry a flag; park stamps (park: true) carry the park's landmark.
+function stampSVG(c, got, i, { park = false } = {}) {
   const ink = got ? STAMP_INK[i % STAMP_INK.length] : "#efe6cf";
   const rot = got ? ((i * 37) % 26) - 13 : 0;
-  const name = c.name.replace("United Kingdom", "U.K.").replace("United States", "U.S.A.").toUpperCase();
+  const name = (park ? c.short : c.name).replace("United Kingdom", "U.K.").replace("United States", "U.S.A.").replace("Hollywood Studios", "Hollywood").toUpperCase();
+  const sid = `${park ? "p-" : ""}${c.id}`;
   return `<div class="stamp ${got ? "" : "empty-s"}" title="${esc(c.name)}">
     <svg class="st" viewBox="-40 -40 80 80" style="transform:rotate(${rot}deg)" aria-hidden="true">
-      <defs><path id="stT-${c.id}" d="M-26 0a26 26 0 1 1 52 0"/><path id="stB-${c.id}" d="M-29 0a29 29 0 1 0 58 0"/></defs>
+      <defs><path id="stT-${sid}" d="M-26 0a26 26 0 1 1 52 0"/><path id="stB-${sid}" d="M-29 0a29 29 0 1 0 58 0"/></defs>
       <circle r="37" fill="none" stroke="${ink}" stroke-width="2.4" ${got ? "" : 'stroke-dasharray="3 3"'}/>
       <circle r="21" fill="none" stroke="${ink}" stroke-width=".8"/>
-      <text fill="${ink}" font-family="Barlow Condensed, sans-serif" font-weight="800" font-size="${name.length > 11 ? 7.5 : 9}" letter-spacing="1.2"><textPath href="#stT-${c.id}" startOffset="50%" text-anchor="middle">${esc(name)}</textPath></text>
-      <text fill="${ink}" font-family="Barlow Condensed, sans-serif" font-weight="700" font-size="6.5" letter-spacing="2.4" dominant-baseline="hanging"><textPath href="#stB-${c.id}" startOffset="50%" text-anchor="middle">★ EPCOT ★</textPath></text>
-      <svg x="-13.5" y="-9" width="27" height="18" viewBox="0 0 30 20" preserveAspectRatio="xMidYMid slice" style="${got ? "" : "filter:grayscale(1)"}">${flagBody(c.id)}</svg>
+      <text fill="${ink}" font-family="Barlow Condensed, sans-serif" font-weight="800" font-size="${name.length > 11 ? 7.5 : 9}" letter-spacing="1.2"><textPath href="#stT-${sid}" startOffset="50%" text-anchor="middle">${esc(name)}</textPath></text>
+      <text fill="${ink}" font-family="Barlow Condensed, sans-serif" font-weight="700" font-size="6.5" letter-spacing="2.4" dominant-baseline="hanging"><textPath href="#stB-${sid}" startOffset="50%" text-anchor="middle">${park ? "★ WALT DISNEY WORLD ★" : "★ EPCOT ★"}</textPath></text>
+      ${park ? `<svg x="-16" y="-15" width="32" height="26" viewBox="-25 -29 50 41" style="${got ? "" : "filter:grayscale(1);opacity:.55"}">${parkGlyph(c.id)}</svg>`
+        : `<svg x="-13.5" y="-9" width="27" height="18" viewBox="0 0 30 20" preserveAspectRatio="xMidYMid slice" style="${got ? "" : "filter:grayscale(1)"}">${flagBody(c.id)}</svg>`}
     </svg></div>`;
 }
 
@@ -1108,6 +1203,8 @@ function renderPassport() {
   const tried = items.filter((x) => x.it.tried);
   const want = items.filter((x) => x.it.want && !x.it.tried && x.current);
   const got = stampsFor(rec);
+  const gotParks = new Set(tried.map((x) => x.park));
+  const ps = parkList();
   const cs = D().countries.filter((c) => c.pavilion || got.has(c.id) || D().drinks.some((d) => d.country === c.id)).filter((c) => c.id !== "park");
   const byFest = {};
   for (const x of tried) (byFest[x.festival] ||= []).push(x);
@@ -1119,8 +1216,11 @@ function renderPassport() {
   return `
     <div class="passport">
       <span class="seal">${icon("globe")}</span>
-      <div class="passport-head">${avatar(state.me.emoji)}<div><div class="eyebrow">World Showcase Passport</div><h2>${esc(state.me.name)}</h2></div></div>
-      <div class="meta"><span><b>${tried.length}</b>tried this visit</span>${past.length ? `<span><b>${tried.length + past.length}</b>all-time</span>` : ""}<span><b>${got.size}/${cs.length}</b>stamps</span></div>
+      <div class="passport-head">${avatar(state.me.emoji)}<div><div class="eyebrow">Park Passport</div><h2>${esc(state.me.name)}</h2></div></div>
+      <div class="meta"><span><b>${tried.length}</b>tried this visit</span>${past.length ? `<span><b>${tried.length + past.length}</b>all-time</span>` : ""}<span><b>${got.size + gotParks.size}/${cs.length + ps.length}</b>stamps</span></div>
+      <p class="stamp-label">Parks</p>
+      <div class="stamps">${ps.map((p, i) => stampSVG(p, gotParks.has(p.id), i + 2, { park: true })).join("")}</div>
+      <p class="stamp-label">World Showcase</p>
       <div class="stamps">${cs.map((c, i) => stampSVG(c, got.has(c.id), i)).join("")}</div>
     </div>
     ${want.length ? `<p class="group-label">${icon("heart")}Want to try (${want.length})</p><div class="drinks">${want.map((x) => drinkCard(x.d, { showWhere: true })).join("")}</div>` : ""}
@@ -1131,7 +1231,7 @@ function renderPassport() {
           <p class="where">${flag(x.country)}${esc(x.booth)} · no longer on the menu</p>
           <div class="chips">${x.it.rating ? `<span class="chip star">${icon("star")}${x.it.rating}</span>` : ""}</div>
           ${x.it.note ? `<p class="my-note">“${esc(x.it.note)}”</p>` : ""}</article>`).join("")}</div>`).join("")
-    || (past.length ? "" : `<div class="empty"><div class="e">${icon("glass")}</div><p>Nothing yet — pick a pavilion on the map and start sipping.</p></div>`)}
+    || (past.length ? "" : `<div class="empty"><div class="e">${icon("glass")}</div><p>Nothing yet — pick a spot on the map and start sipping.</p></div>`)}
     ${Object.values(byVisit).map(({ v, xs }) => `
       <p class="group-label">${icon("ticket")}${esc(v.name)} (${xs.length})</p>
       <div class="drinks">${xs.sort((a, b) => (b.rating || 0) - (a.rating || 0)).map((t) => `
@@ -1351,7 +1451,8 @@ function addSheet({ log = false } = {}) {
   if (!state.me) return joinSheet();
   const A = D().anchors;
   const here = state.sel && A[state.sel] ? A[state.sel] : null;
-  const opts = WALK.filter((id) => A[id]).map((id) => `<option value="${id}" ${id === state.sel ? "selected" : ""}>${esc(A[id].name)}</option>`).join("");
+  const epcot = state.park === "epcot";
+  const opts = walkOrder().filter((id) => A[id]).map((id) => `<option value="${id}" ${id === state.sel ? "selected" : ""}>${esc(A[id].kind === "land" ? `${A[id].name} (anywhere)` : A[id].name)}</option>`).join("");
   const guessCountry = state.sel && A[state.sel]?.kind === "pavilion" ? (state.sel === "america" ? "usa" : state.sel) : "park";
   openSheet(`
     <h2>${log ? "Log a drink" : "Add a drink"}</h2>
@@ -1359,15 +1460,15 @@ function addSheet({ log = false } = {}) {
     <label class="field"><span>Drink name *</span><input id="aName" maxlength="90" placeholder="${log ? "e.g. House margarita" : "e.g. Frozen Grey Goose Orange Slush"}" /></label>
     <label class="field"><span>Where? (map spot)</span><select id="aAnchor">${opts}</select></label>
     <label class="field"><span>Restaurant / bar${log ? " (optional)" : ""}</span><input id="aBooth" maxlength="60" placeholder="e.g. ${log ? "San Angel Inn" : "Les Vins des Chefs de France"}" /></label>
-    <label class="field"><span>Country</span><select id="aCountry">${D().countries.map((c) => `<option value="${c.id}" ${c.id === guessCountry ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select></label>
+    ${epcot ? `<label class="field"><span>Country</span><select id="aCountry">${D().countries.map((c) => `<option value="${c.id}" ${c.id === guessCountry ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select></label>` : ""}
     <label class="field"><span>Type</span><select id="aType">${D().types.map((t) => `<option value="${t}">${TYPE_LABEL[t]}</option>`).join("")}</select></label>
     <label class="field"><span>Price</span><input id="aPrice" maxlength="30" placeholder="$14.00" /></label>
     ${log ? "" : `<label class="field"><span>What's in it?</span><textarea id="aDesc" rows="2" maxlength="240"></textarea></label>`}
-    <label class="check-field"><input type="checkbox" id="aYr" /> <span>It's on the year-round menu (not just this festival)</span></label>
+    ${epcot ? `<label class="check-field"><input type="checkbox" id="aYr" /> <span>It's on the year-round menu (not just this festival)</span></label>` : ""}
     <label class="check-field"><input type="checkbox" id="aShow" ${log ? "" : "checked"} /> <span>Show it on the map and menu for everyone</span></label>
     <button class="btn accent block" id="aGo">${log ? `${icon("check")}Log it — I had this` : "Add for everyone"}</button>`, (el) => {
     $("#aGo", el).onclick = async () => {
-      const body = { member: state.me.name, name: $("#aName").value, anchor: $("#aAnchor").value, country: $("#aCountry").value, booth: $("#aBooth").value || (log && here ? here.name : ""), type: $("#aType").value, price: $("#aPrice").value, desc: $("#aDesc")?.value || "", yearRound: $("#aYr").checked, hidden: !$("#aShow").checked };
+      const body = { member: state.me.name, park: state.park, name: $("#aName").value, anchor: $("#aAnchor").value, country: $("#aCountry")?.value || "park", booth: $("#aBooth").value || (log && here ? here.name : ""), type: $("#aType").value, price: $("#aPrice").value, desc: $("#aDesc")?.value || "", yearRound: epcot ? $("#aYr").checked : true, hidden: !$("#aShow").checked };
       if (!body.name.trim()) return toast("Give it a name");
       try {
         const out = await api("drinks", { method: "POST", body });
@@ -1404,23 +1505,31 @@ function moreSheet(d) {
 }
 
 // Settings: menu status, manual update via claude.ai (no API key), optional API refresh.
-const admin = { code: null, prompt: null, text: null };
+// admin.park: which park the prompt / upload / research is for (defaults to the one on screen).
+const admin = { code: null, prompt: null, prompts: null, text: null, park: null };
 
 function infoSheet() {
-  const { festival: f, nextFestival: nf, menu, refresh } = D();
+  const { festival: f, nextFestival: nf, refresh } = D();
+  admin.park = admin.park && PK(admin.park).id === admin.park ? admin.park : state.park;
+  const ap = admin.park, epcot = ap === "epcot";
+  const menu = epcot ? D().menu : D().menu.parks?.[ap] || {};
   const st = refresh || {};
   const busy = st.state === "running" || st.state === "queued";
   const src = (menu.sources || []).slice(0, 8).map((u) => `<div class="src">• <a href="${esc(u)}" target="_blank" rel="noopener">${esc(u.replace(/^https?:\/\/(www\.)?/, ""))}</a></div>`).join("");
   const origin = { seed: " (starter menu)", manual: " (uploaded)", claude: "" }[menu.origin] || "";
   const unlocked = !!admin.prompt;
+  const prompt = admin.prompts?.[ap] || admin.prompt;
   openSheet(`
     <h2>Settings</h2>
-    <p class="group-label">${icon("info")}Current menu</p>
+    <div class="seg park-seg">${parkList().map((p) => `<button class="${p.id === ap ? "on" : ""}" data-apark="${p.id}">${esc(p.short.replace("Hollywood Studios", "Hollywood").replace("Animal Kingdom", "Animal K.").replace("Magic Kingdom", "Magic K."))}</button>`).join("")}</div>
+    <p class="group-label">${icon("info")}${esc(PK(ap).short)} menu</p>
     <dl class="kv">
-      <dt>Festival</dt><dd>${f?.name ? `${esc(f.name)}<br><span class="muted">${fmtDate(f.starts)} – ${fmtDate(f.ends)}${f.active ? "" : " (not running today)"}</span>` : "None running today"}</dd>
+      ${epcot ? `<dt>Festival</dt><dd>${f?.name ? `${esc(f.name)}<br><span class="muted">${fmtDate(f.starts)} – ${fmtDate(f.ends)}${f.active ? "" : " (not running today)"}</span>` : "None running today"}</dd>
       ${nf?.name ? `<dt>Next up</dt><dd>${esc(nf.name)}${nf.starts ? ` · ${fmtDate(nf.starts)}` : ""}</dd>` : ""}
       <dt>Festival menu</dt><dd>updated ${ago(menu.checkedAt)}${origin}</dd>
-      <dt>Year-round</dt><dd>${menu.yearRoundCheckedAt ? `updated ${ago(menu.yearRoundCheckedAt)}` : "starter list"}</dd>
+      <dt>Year-round</dt><dd>${menu.yearRoundCheckedAt ? `updated ${ago(menu.yearRoundCheckedAt)}` : "starter list"}</dd>`
+      : `<dt>Drinks</dt><dd>${D().drinks.filter((d) => parkOf(d) === ap).length} at ${new Set(D().drinks.filter((d) => parkOf(d) === ap).map((d) => d.anchor)).size} spots</dd>
+      <dt>Menu</dt><dd>updated ${ago(menu.checkedAt)}${origin}</dd>`}
       <dt>Last update</dt><dd>${st.state === "never" ? "—" : `${esc(st.state)} ${ago(st.finishedAt || st.startedAt)}${st.message ? `<br><span class="muted">${esc(st.message)}</span>` : ""}`}</dd>
     </dl>
     ${src ? `<details class="srcs"><summary>Sources (${(menu.sources || []).length})</summary>${src}</details>` : ""}
@@ -1428,9 +1537,9 @@ function infoSheet() {
     <p class="group-label">${icon("refresh")}Update the menu</p>
     ${unlocked ? `
       <ol class="steps">
-        <li><b>Copy the prompt</b><p>It already knows today's date and every map spot and field the app needs.</p>
+        <li><b>Copy the ${esc(PK(ap).short)} prompt</b><p>It already knows today's date and every ${epcot ? "map spot" : "bar, restaurant and stand"} and field the app needs. Each park has its own prompt: pick the park above.</p>
           <div class="btn-row"><button class="btn accent" id="copyPrompt">${icon("copy")}Copy prompt</button></div>
-          <details class="prompt-peek"><summary>Show the prompt</summary><textarea class="mono" id="promptText" readonly>${esc(admin.prompt)}</textarea></details></li>
+          <details class="prompt-peek"><summary>Show the prompt</summary><textarea class="mono" id="promptText" readonly>${esc(prompt)}</textarea></details></li>
         <li><b>Run it in Claude</b><p>Paste it into a new chat at claude.ai with <b style="display:inline;font:inherit;text-transform:none;letter-spacing:0">web search</b> turned on. It replies with one block of JSON; this can take a few minutes. If the reply stops early, tell it "continue".</p>
           <div class="btn-row"><a class="btn" href="https://claude.ai/new" target="_blank" rel="noopener">${icon("external")}Open claude.ai</a></div></li>
         <li><b>Upload the reply</b><p>Save the JSON as a file and drop it here, or copy Claude's whole reply and paste it below.</p>
@@ -1451,14 +1560,14 @@ function infoSheet() {
 
     ${st.enabled ? `
       <p class="group-label">${icon("bolt")}Automatic research</p>
-      <p class="muted" style="font-size:.84rem">${st.auto ? `On — re-checks every ${st.everyDays} days, plus the day a festival starts or ends.` : "Uses the API key set in Netlify. Only runs when you tap the button."}</p>
-      ${unlocked ? `<button class="btn block" id="refreshNow" ${busy ? "disabled" : ""}>${busy ? "Updating… (takes a few minutes)" : `${icon("refresh")}Research the menu with the API now`}</button>` : `<p class="muted" style="font-size:.8rem">Unlock above to use it.</p>`}` : ""}
+      <p class="muted" style="font-size:.84rem">${st.auto ? `On — re-checks EPCOT every ${st.everyDays} days (plus the day a festival starts or ends) and the other parks every 3 weeks.` : "Uses the API key set in Netlify. Only runs when you tap the button."}</p>
+      ${unlocked ? `<button class="btn block" id="refreshNow" ${busy ? "disabled" : ""}>${busy ? "Updating… (takes a few minutes)" : `${icon("refresh")}Research ${esc(PK(ap).short)} with the API now`}</button>` : `<p class="muted" style="font-size:.8rem">Unlock above to use it.</p>`}` : ""}
     <p class="muted" style="font-size:.78rem;margin-top:14px">Prices can change at the booth — if something's off, fix it from the drink's ••• menu or add it with ＋.</p>
   `, (el) => {
     const unlock = async (code, quiet) => {
       try {
         const out = await api("unlock", { method: "POST", body: {}, headers: { "x-refresh-code": code } });
-        admin.code = code; admin.prompt = out.prompt; ls.set(LS.rcode, code);
+        admin.code = code; admin.prompt = out.prompt; admin.prompts = out.prompts || null; ls.set(LS.rcode, code);
         $("#toast").hidden = true;
         infoSheet();
       } catch (e) { if (!quiet) toast(e.message); }
@@ -1471,8 +1580,9 @@ function infoSheet() {
     $("#adminCode", el)?.addEventListener("keydown", (e) => { if (e.key === "Enter") $("#unlock", el).click(); });
     if (!unlocked && ls.get(LS.rcode, "")) unlock(ls.get(LS.rcode, ""), true);
 
+    el.querySelectorAll("[data-apark]").forEach((b) => b.addEventListener("click", () => { admin.park = b.dataset.apark; admin.text = null; infoSheet(); }));
     $("#copyPrompt", el)?.addEventListener("click", async () => {
-      try { await navigator.clipboard.writeText(admin.prompt); }
+      try { await navigator.clipboard.writeText(prompt); }
       catch { const t = $("#promptText", el); t.closest("details").open = true; t.select(); document.execCommand("copy"); }
       toast("Prompt copied — paste it into claude.ai");
     });
@@ -1488,7 +1598,7 @@ function infoSheet() {
     drop?.addEventListener("dragleave", () => drop.classList.remove("over"));
     drop?.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); readFile(e.dataTransfer.files[0]); });
 
-    const send = (dryRun) => api("import", { method: "POST", body: { text: admin.text, dryRun, member: state.me?.name }, headers: { "x-refresh-code": admin.code } });
+    const send = (dryRun) => api("import", { method: "POST", body: { text: admin.text, dryRun, park: ap, member: state.me?.name }, headers: { "x-refresh-code": admin.code } });
     const check = async () => {
       admin.text = $("#importText", el).value;
       if (!admin.text.trim()) return toast("Upload a file or paste Claude's reply first");
@@ -1523,7 +1633,7 @@ function infoSheet() {
     });
 
     $("#refreshNow", el)?.addEventListener("click", async () => {
-      try { await api("refresh", { method: "POST", body: { member: state.me?.name }, headers: { "x-refresh-code": admin.code } }); toast("Researching the latest menus… check back in a few minutes"); closeSheet(); setTimeout(() => load({ quiet: true }), 3000); }
+      try { await api("refresh", { method: "POST", body: { member: state.me?.name, jobs: epcot ? ["festival", "yearround"] : [`park:${ap}`] }, headers: { "x-refresh-code": admin.code } }); toast("Researching the latest menus… check back in a few minutes"); closeSheet(); setTimeout(() => load({ quiet: true }), 3000); }
       catch (e) { toast(e.message); }
     });
   });
@@ -1538,8 +1648,9 @@ function suggestVisitName() {
 }
 
 function importPreview(p, ok) {
-  const f = p.festival, y = p.yearRound;
+  const f = p.festival, y = p.yearRound, pm = p.parkMenu;
   const rows = [];
+  if (pm) rows.push(`<div class="imp-row">${icon("map")}<div><b>${esc(PK(p.park).name)}</b><small>${pm.booths} spots · ${pm.drinks} drinks</small></div></div>`);
   if (f) rows.push(`<div class="imp-row">${icon("ticket")}<div><b>${f.name ? esc(f.name) : "No festival running"}</b><small>${f.name ? `${fmtDate(f.starts) || "?"} – ${fmtDate(f.ends) || "?"} · ${f.active ? "running now" : "not running today"} · ` : ""}${f.booths} booths · ${f.drinks} drinks${f.nextFestival?.name ? `<br>Next: ${esc(f.nextFestival.name)}${f.nextFestival.starts ? ` · ${fmtDate(f.nextFestival.starts)}` : ""}` : ""}</small></div></div>`);
   if (y) rows.push(`<div class="imp-row">${icon("globe")}<div><b>Year-round pavilion drinks</b><small>${y.booths} spots · ${y.drinks} drinks</small></div></div>`);
   if (p.sources) rows.push(`<div class="imp-row">${icon("info")}<div><b>${p.sources} source link${p.sources > 1 ? "s" : ""}</b><small>shown under Settings → Sources</small></div></div>`);
@@ -1549,7 +1660,7 @@ function importPreview(p, ok) {
       ${rows.join("")}
       ${p.errors.length ? `<ul class="errs">${p.errors.map((e) => `<li>${esc(e)}</li>`).join("")}</ul>` : ""}
       ${p.warnings.length ? `<ul>${p.warnings.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>` : ""}
-      ${ok ? `<p class="muted" style="font-size:.8rem;margin:10px 0">This replaces ${f && y ? "the festival and year-round menus" : f ? "the festival menu" : "the year-round list"} for everyone. Family ratings stay in each person's passport.</p>
+      ${ok ? `<p class="muted" style="font-size:.8rem;margin:10px 0">This replaces ${pm ? `the ${esc(PK(p.park).short)} menu` : f && y ? "the festival and year-round menus" : f ? "the festival menu" : "the year-round list"} for everyone. Family ratings stay in each person's passport.</p>
         <button class="btn accent block" id="applyImport">${icon("upload")}Update the map</button>` : ""}
     </div></div>`;
 }
@@ -1565,7 +1676,7 @@ async function checkin(drinkId, patch) {
   rec.items[drinkId] = cur;
   if (patch.tried && !myItem(drinkId).rating) {} // noop
   render();
-  const snapshot = d ? { name: d.name, booth: d.booth, price: d.price, type: d.type, country: d.country, festival: d.yearRound ? "Year-round" : festLabel() } : undefined;
+  const snapshot = d ? { name: d.name, booth: d.booth, price: d.price, type: d.type, country: d.country, park: parkOf(d), festival: parkOf(d) !== "epcot" ? PK(parkOf(d)).short : d.yearRound ? "Year-round" : festLabel() } : undefined;
   try {
     const out = await api("checkin", { method: "POST", body: { member: state.me.name, emoji: state.me.emoji, drinkId, snapshot, ...patch } });
     Object.assign(rec, out.member);
@@ -1573,10 +1684,39 @@ async function checkin(drinkId, patch) {
   } catch (e) { toast(e.message); load({ quiet: true }); }
 }
 
-function jumpTo(anchor) {
+async function jumpTo(anchor) {
+  const park = anchorOf(anchor)?.park || "epcot";
   state.tab = "map"; ls.set(LS.tab, "map");
+  if (park !== state.park) setPark(park);
+  await loadMap(park).catch(() => {});
   render();
-  requestAnimationFrame(() => selectSpot(anchor));
+  requestAnimationFrame(() => { if (geo?.pts[anchor]) selectSpot(anchor); });
+}
+
+// ── Parks ─────────────────────────────────────────────────────────────────
+function setPark(id) {
+  if (!D()?.parks?.[id] || id === state.park) return;
+  stopAnim();
+  state.park = id; ls.set(LS.park, id);
+  state.sel = null; state.drawer = "peek"; state.me_pos = null;
+  geo = null; view = null; vb = null; fitVB = null; mapBuiltFor = null;
+  $("#overlay").innerHTML = "";
+  render();
+}
+function parksSheet() {
+  const count = (id) => D().drinks.filter((d) => parkOf(d) === id && !d.hidden).length;
+  const tried = new Set(members().flatMap((m) => memberItems(m).filter((x) => x.it.tried).map((x) => x.park)));
+  openSheet(`
+    <h2>Pick a park</h2>
+    <p class="muted">Every park has its own map and menu. Family check-ins, the tab and passports cover all of them.</p>
+    <div class="park-list">${parkList().map((p) => `
+      <button class="park-card ${p.id === state.park ? "on" : ""}" data-park="${p.id}">
+        <span class="park-art"><svg viewBox="-25 -29 50 41" aria-hidden="true">${parkGlyph(p.id)}</svg></span>
+        <span class="park-txt"><b>${esc(p.short)}</b><small>${count(p.id)} drinks${p.festivals && D().festival?.active ? ` · ${esc(shortFest(D().festival.name))}` : ""}${tried.has(p.id) ? " · family has sipped here" : ""}</small></span>
+        ${p.id === state.park ? `<span class="chip">Showing</span>` : icon("chevron", "go")}
+      </button>`).join("")}</div>`, (el) => {
+    el.querySelectorAll("[data-park]").forEach((b) => b.addEventListener("click", () => { closeSheet(); setPark(b.dataset.park); }));
+  });
 }
 
 // ── Events ────────────────────────────────────────────────────────────────
@@ -1595,6 +1735,7 @@ document.addEventListener("click", (ev) => {
   }
   if (t.hasAttribute("data-closespot")) { state.sel = null; state.drawer = "peek"; render(); return; }
   if (t.hasAttribute("data-join")) return joinSheet();
+  if (t.hasAttribute("data-parks")) return parksSheet();
   if (t.hasAttribute("data-log-here")) return addSheet({ log: true });
   if (t.dataset.brange) { state.buzzRange = t.dataset.brange; render(); return; }
   if (t.hasAttribute("data-ftoggle")) return setFiltersOpen(!state.filtersOpen);
@@ -1647,6 +1788,7 @@ document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && !$("#s
 $("#drawerGrip").onclick = () => { state.drawer = state.drawer === "full" ? (state.sel ? "half" : "peek") : state.drawer === "half" ? "full" : "half"; render(); };
 $("#meBtn").onclick = joinSheet;
 $("#festBtn").onclick = () => D() && infoSheet();
+$("#parkBtn").onclick = () => D() && parksSheet();
 $("#settingsBtn").onclick = () => D() && infoSheet();
 $("#addBtn").onclick = addSheet;
 $("#locBtn").onclick = toggleLocate;

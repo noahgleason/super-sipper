@@ -46,6 +46,11 @@
   --bld-edge: #a8987a;
   --bld-attr: #e9cfa6;
   --bld-attr-edge: #a57f4c;
+  --meadow: #cdc98f;
+  --meadow-2: #b6b277;
+  --rock: #c98a62;
+  --rock-edge: #9c5f3e;
+  --dirt: #d2b184;
   --label: #1a1d20;
   --label-halo: #fbf7ec;
   --map-dim: 0;
@@ -109,6 +114,22 @@ input, select, textarea { font: inherit; color: inherit; }
 .top::after { content: ""; position: absolute; left: 0; right: 0; bottom: -3px; height: 3px; background: linear-gradient(90deg, var(--accent) 0 70%, var(--accent-2) 70% 85%, var(--brass) 85%); }
 .brand { flex: none; width: 34px; height: 34px; display: grid; place-items: center; border: 1.5px solid var(--brass); color: var(--brass); }
 .brand svg { width: 24px; height: 24px; }
+/* Park switcher: the current park's landmark on a light plate, with a chevron */
+.park-btn { width: auto; height: 42px; padding: 0 3px 0 2px; display: flex; align-items: center; gap: 1px; background: #fbf7ec; border-radius: var(--r); }
+.park-btn svg { width: 38px; height: 32px; }
+.park-btn .chev { width: 13px; height: 13px; color: #6b5a33; stroke-width: 2.4; }
+.park-list { display: grid; gap: 8px; margin-top: 12px; }
+.park-card { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; background: var(--surface-2); border: 1px solid var(--line); border-left: 4px solid var(--line-2); border-radius: var(--r); padding: 8px 12px 8px 8px; color: var(--ink); }
+.park-card.on { border-left-color: var(--accent); background: var(--surface); }
+.park-art { width: 64px; height: 52px; flex: none; display: grid; place-items: center; background: #fbf7ec; border: 1px solid var(--line); }
+.park-art svg { width: 58px; height: 48px; }
+.park-txt { flex: 1; min-width: 0; }
+.park-txt b { display: block; font-family: var(--display); font-size: 1.15rem; letter-spacing: .04em; text-transform: uppercase; line-height: 1.05; }
+.park-txt small { color: var(--ink-3); font-size: .78rem; }
+.park-card .go { width: 18px; height: 18px; transform: rotate(-90deg); color: var(--ink-3); }
+.park-seg { margin: 4px 0 2px; }
+.park-seg button { font-family: var(--display); letter-spacing: .04em; text-transform: uppercase; font-size: .78rem; }
+.booth-name .linkbtn { margin-left: 8px; vertical-align: middle; }
 .fest {
   flex: 1; min-width: 0; text-align: left; background: none; border: 0; padding: 2px 0; color: inherit;
   display: flex; flex-direction: column; gap: 1px;
@@ -459,6 +480,7 @@ select.sort { border: 1px solid var(--line-2); background: var(--surface); borde
 .passport .seal { position: absolute; right: -24px; top: -24px; width: 130px; height: 130px; opacity: .15; color: #c9a24c; }
 .passport .seal .i { width: 100%; height: 100%; stroke-width: .6; }
 .stamps { display: grid; grid-template-columns: repeat(auto-fill, minmax(74px, 1fr)); gap: 10px 8px; margin-top: 18px; }
+.stamp-label { margin: 18px 0 -8px; font-family: var(--display); font-weight: 700; font-size: .72rem; letter-spacing: .18em; text-transform: uppercase; color: #c9a24c; opacity: .85; }
 .stamp { aspect-ratio: 1; position: relative; display: grid; place-items: center; }
 .stamp svg.st { width: 100%; height: 100%; overflow: visible; }
 .stamp.empty-s { opacity: .35; }
