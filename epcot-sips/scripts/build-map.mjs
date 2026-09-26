@@ -36,9 +36,21 @@ const PARKS = {
     entrance: { names: ["Tickets"], dy: 24 },
     waterLabels: { "Discovery River": ["Discovery River"] },
   },
+  tl: {
+    bbox: [28.3615, -81.5340, 28.3705, -81.5240], origin: { lat: 28.3658, lng: -81.5295 }, rot: 90,
+    park: "Disney's Typhoon Lagoon", hero: { kind: "boat", name: "Mount Mayday" },
+    entrance: { at: { lat: 28.36545, lng: -81.52790 }, dy: 0 },
+    waterLabels: {},
+  },
+  bb: {
+    bbox: [28.3475, -81.5795, 28.3555, -81.5690], origin: { lat: 28.3518, lng: -81.5745 }, rot: 45,
+    park: "Disney's Blizzard Beach", hero: { kind: "ski", name: "Mount Gushmore" },
+    entrance: { at: { lat: 28.35115, lng: -81.57285 }, dy: 0 },
+    waterLabels: {},
+  },
 };
 
-const QUERY = (b) => `[out:json][timeout:170];(way(${b});relation(${b})[natural=water];);out geom;`;
+const QUERY = (b) => `[out:json][timeout:170];(way(${b});relation(${b})[natural=water];node(${b})[natural=peak];);out geom;`;
 const MIRRORS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter", "https://overpass.private.coffee/api/interpreter"];
 
 async function download(bbox) {
@@ -129,7 +141,11 @@ function build(id, osm) {
 
   for (const e of osm.elements) {
     const t = e.tags || {};
-    if (e.type === "node") continue;
+    if (e.type === "node") {
+      // a named mountain peak can be the park's landmark (Mount Mayday, Mount Gushmore)
+      if (t.name === cfg.hero.name && !hero) hero = { kind: cfg.hero.kind, at: proj(e).map(r1), r: 30 };
+      continue;
+    }
     if (e.type === "relation") {
       const outer = stitch(e.members.filter((m) => m.role === "outer" && m.geometry).map((m) => m.geometry));
       const inner = stitch(e.members.filter((m) => m.role === "inner" && m.geometry).map((m) => m.geometry));
@@ -149,14 +165,16 @@ function build(id, osm) {
       const r = poly(); if (r) { add("water", [r]); if (t.name && cfg.waterLabels?.[t.name]) found.water.push({ name: t.name, r }); }
       continue;
     }
+    if (t.attraction === "water_slide" || t.leisure === "water_slide") { if (closed) { const r = poly(); if (r) add("water", [r]); } else add("slide", [line(0.4)], false); continue; }
+    if (t.attraction === "lazy_river") { if (closed) { const r = poly(); if (r) add("water", [r]); } else add("canal", [line()], false); continue; }
     if (["canal", "stream", "river", "drain"].includes(t.waterway)) { add(closed ? "water" : "canal", [closed ? ringOf(g, 0.5) : line()], closed); continue; }
     if (t.building && t.building !== "no" || t.man_made === "bridge") {
       const r = poly(); if (!r) continue;
       const k = t.man_made === "bridge" ? "bridge" : t.building === "roof" || t.building === "tent" ? "roof" : t.building === "greenhouse" ? "glass"
         : t.tourism === "attraction" || t.tourism === "gallery" || t.tourism === "aquarium" || t.building === "train_station" || t.building === "transportation" ? "attr" : "bld";
       add(k, [r]);
-      if (t.name === cfg.hero.name) { const c0 = centroid(r); hero = { kind: cfg.hero.kind, at: c0, r: r1(Math.sqrt(area(r) / Math.PI)) }; }
-      if (cfg.entrance.names.includes(t.name)) found.entrance.push(centroid(r));
+      if (t.name === cfg.hero.name && !hero) { const c0 = centroid(r); hero = { kind: cfg.hero.kind, at: c0, r: r1(Math.sqrt(area(r) / Math.PI)) }; }
+      if (cfg.entrance.names?.includes(t.name)) found.entrance.push(centroid(r));
       for (const [k2, n] of Object.entries(cfg.spots || {})) if (t.name === n) found.spots[k2] = centroid(r);
       continue;
     }
@@ -183,6 +201,7 @@ function build(id, osm) {
   }
   if (!parkRing) throw new Error(`${id}: no theme_park outline named "${cfg.park}"`);
   if (!hero) throw new Error(`${id}: couldn't find ${cfg.hero.name}`);
+  if (cfg.entrance.at) found.entrance.push(proj({ lat: cfg.entrance.at.lat, lon: cfg.entrance.at.lng }).map(r1));
   if (!found.entrance.length) throw new Error(`${id}: couldn't find the entrance`);
 
   const xs = parkRing.map((p) => p[0]), ys = parkRing.map((p) => p[1]);

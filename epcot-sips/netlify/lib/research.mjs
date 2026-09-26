@@ -226,6 +226,8 @@ For each pavilion give 3–8 standout drinks with the location name, exact price
 const PARK_FOCUS = {
   mk: "Magic Kingdom only serves alcohol at table-service restaurants and The Beak and Barrel lounge, so include those beer/wine/cocktail lists, plus signature non-alcoholic drinks at quick-service spots, snack stands and carts (DOLE Whip floats at Aloha Isle, LeFou's Brew at Gaston's Tavern, frozen drinks, Joffrey's specialty coffees, seasonal specials).",
   hs: "Include Oga's Cantina and Star Wars: Galaxy's Edge (Milk Stand, Docking Bay 7, Kat Saka's Kettle, Ronto Roasters), Toy Story Land, BaseLine Tap House, the Hollywood Brown Derby Lounge, Tune-In Lounge (50's Prime Time Café), Sci-Fi Dine-In, Roundup Rodeo BBQ, quick-service spots, stands and carts.",
+  tl: "Typhoon Lagoon is a water park: include Let's Go Slurpin', Leaning Palms, Typhoon Tilly's, Snack Shack, Lowtide Lou's, Surf Doggies and the Joffrey's carts.",
+  bb: "Blizzard Beach is a water park: include Polar Pub, Frostbite Freddy's Frozen Freshments, Lottawatta Lodge, Avalunch, Warming Hut and the Joffrey's carts. It closes part of the year for refurbishment; list its drinks as served when open.",
   ak: "Include Nomad Lounge, Pongu Pongu and Satu'li Canteen (Pandora), Dawa Bar, Thirsty River Bar, Tusker House, Tiffins, Yak & Yeti (restaurant, Quality Beverages, Local Food Cafés), Harambe Market, Isle of Java, Warung Outpost, quick-service spots, stands and carts.",
 };
 

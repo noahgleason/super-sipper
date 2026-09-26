@@ -1,11 +1,13 @@
 # 🗺️🍹 Epcot Sips
 
-A phone app for the whole family, built around live maps of all four Walt Disney World theme parks: EPCOT (the default), Magic Kingdom, Hollywood Studios and Animal Kingdom. Tap the park landmark at the top left to switch parks. EPCOT's menu follows the festivals all year: Food & Wine, then the Festival of the Holidays, then the Festival of the Arts in January, then Flower & Garden, and year-round pavilion drinks in between. The other parks list every bar, lounge, restaurant, stand and cart that pours something worth trying.
+A phone app for the whole family, built around live maps of the Walt Disney World parks: the four theme parks (EPCOT is the default, then Magic Kingdom, Hollywood Studios and Animal Kingdom) and both water parks (Typhoon Lagoon and Blizzard Beach). Tap the park landmark at the top left to switch parks. EPCOT's menu follows the festivals all year: Food & Wine, then the Festival of the Holidays, then the Festival of the Arts in January, then Flower & Garden, and year-round pavilion drinks in between. The other parks list every bar, lounge, restaurant, stand and cart that pours something worth trying.
 
 ## What it does
 
 - **Map of EPCOT.** The map is 1:1 with the real park: the lagoon, walkways, gardens and building footprints come from OpenStreetMap (the same geography as the map in the Disney World app), drawn in an illustrated style with a landmark for each pavilion (pyramid, pagoda, Eiffel Tower and so on) and a drink count. Festival booths show as flag pins. North is at the bottom, so the gates are at the bottom and World Showcase is at the top, like Disney's printed park maps.
-- **Maps of the other parks.** Magic Kingdom, Hollywood Studios and Animal Kingdom are drawn the same way, 1:1 from OpenStreetMap, each turned so its gates are at the bottom (Magic Kingdom and Animal Kingdom north-up, Hollywood Studios with north to the right, like Disney's maps). The park's landmark is drawn on its real footprint: Cinderella Castle, the Tower of Terror, the Tree of Life. Zoomed out you see one illustrated marker per land with its drink count; zoom in (or tap a land) and every bar, restaurant, stand and cart appears as a pin at its real spot.
+- **Maps of the other parks.** Magic Kingdom, Hollywood Studios, Animal Kingdom, Typhoon Lagoon and Blizzard Beach are drawn the same way, 1:1 from OpenStreetMap, each turned so its gates are at the bottom (Magic Kingdom and Animal Kingdom north-up, Hollywood Studios with north to the right, like Disney's maps). The park's landmark is drawn on its real footprint: Cinderella Castle, the Tower of Terror, the Tree of Life, Miss Tilly on Mount Mayday, the Mount Gushmore ski jump; water slides are drawn in too. Zoomed out you see one illustrated marker per land with its drink count; zoom in (or tap a land) and every bar, restaurant, stand and cart appears as a pin at its real spot.
+  - **Land colors:** every land has its own look: a soft ground color on the map (Fantasyland pink, Tomorrowland blue, Frontierland desert orange…) plus a matching name plate, pins and drawer accent. EPCOT's four neighborhoods get the same treatment.
+  - **Finding a drink:** busy lands and restaurants get a search box and a chip for each bar or stand in the drawer, so you can narrow 100+ drinks to the one you want.
   - **Day and night:** the map follows the real sun over the park. It turns golden around sunrise and sunset, and after dark the walkway lamps, pavilions and Spaceship Earth light up. Add `?sky=21:30` to the URL to preview any time of day.
   - **Moving around:** pinch to zoom, drag to pan. Tap a pavilion to open a drawer with its drinks.
   - **Your location:** the locate button shows a blue "you are here" dot and walking times.
@@ -99,7 +101,7 @@ netlify/lib/research.mjs      Claude web research + JSON conversion
 data/places.mjs               EPCOT: real pavilion coordinates, map spots, countries
 data/drinks.mjs               EPCOT starter menu / fallback
 data/parks.mjs                the four parks, and every map spot in each
-data/parks/{mk,hs,ak}.mjs     each park's lands, drink spots (OpenStreetMap positions) and starter menu
+data/parks/{mk,hs,ak,tl,bb}.mjs  each park's lands (with their colors), drink spots (OpenStreetMap positions) and starter menu
 public/maps/<park>.js         park footprints for the maps (generated)
 scripts/build-map.mjs         rebuilds the maps from OpenStreetMap: node scripts/build-map.mjs [park]
 ```

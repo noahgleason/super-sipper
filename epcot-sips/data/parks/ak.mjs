@@ -7,11 +7,11 @@ export const CHECKED = "2026-09-25";
 export const SOURCES = ["https://touringplans.com/animal-kingdom/dining"];
 
 export const LANDS = {
-  "ak-oasis": {"name": "The Oasis", "short": "The Oasis", "lat": 28.35562, "lng": -81.59034},
-  "ak-discovery-island": {"name": "Discovery Island", "short": "Discovery Island", "lat": 28.35712, "lng": -81.58985},
-  "ak-pandora": {"name": "Pandora - The World of Avatar", "short": "Pandora", "lat": 28.35575, "lng": -81.5924},
-  "ak-africa": {"name": "Africa", "short": "Africa", "lat": 28.3588, "lng": -81.5918},
-  "ak-asia": {"name": "Asia", "short": "Asia", "lat": 28.35878, "lng": -81.58835},
+  "ak-oasis": {"name": "The Oasis", "short": "The Oasis", "lat": 28.35562, "lng": -81.59034, "tint": "#bfe5b3", "ink": "#3f7d42"},
+  "ak-discovery-island": {"name": "Discovery Island", "short": "Discovery Island", "lat": 28.35712, "lng": -81.58985, "tint": "#f4d68c", "ink": "#b07a1a"},
+  "ak-pandora": {"name": "Pandora - The World of Avatar", "short": "Pandora", "lat": 28.35575, "lng": -81.5924, "tint": "#bcc8f6", "ink": "#5a4db8"},
+  "ak-africa": {"name": "Africa", "short": "Africa", "lat": 28.3588, "lng": -81.5918, "tint": "#ecc58f", "ink": "#9a5a1f"},
+  "ak-asia": {"name": "Asia", "short": "Asia", "lat": 28.35878, "lng": -81.58835, "tint": "#eeb5a6", "ink": "#a83c2f"},
 };
 
 export const VENUES = {
@@ -50,7 +50,6 @@ export const WALK = ["ak-oasis", "ak-rainforest-cafe-animal-kingdom", "ak-ak-ent
 
 export const BOOTHS = [
   { name: "Joffrey's (Entrance)", anchor: "ak-ak-entrance-joffreys", where: "The Oasis", note: "", drinks: [
-    ["Frozen Drinks", "$6.79", "na", ""],
     ["Flavored Latte", "$6.79", "coffee", "Vanilla, Caramel, Hazelnut, or Irish Cream"],
     ["Frozen Cappuccino Dream", "$6.99", "coffee", ""],
     ["Signature Frozen Lemonade", "$6.49", "na", ""],
@@ -115,7 +114,7 @@ export const BOOTHS = [
     ["Bubbling Pink Lagoon with Vodka", "$16.50", "cocktail", "Tito's Handmade Vodka, Minute Maid Premium Strawberry Lemonade, Sprite, and Kiwi Flavor"],
     ["Island Breeze", "$15.50", "frozen", "Parrot Bay Coconut Rum with layers of Frozen Mango and Raspberry"],
     ["Safari Amber - St. Louis, MO", "$12.50", "beer", "20-oz Draft - Red Lager with toasted notes of Caramel, Malt, and Hops"],
-    ["RAMONA Blood Orange Wine Spritz", "$11.75", "cocktail", ""],
+    ["RAMONA Blood Orange Wine Spritz", "$11.75", "wine", ""],
     ["Bud Light Lager - St. Louis, MO", "$10.00", "beer", "20-oz Draft - Golden-colored with flavors that are dry, clean, crisp, and refreshing with subtle bitterness"],
     ["Bubbling Pink Lagoon", "$6.29", "na", "Minute Maid Premium Strawberry Lemonade, Sprite, and Kiwi flavor"],
     ["Frozen Mango Slushy", "$6.29", "na", ""],
@@ -131,7 +130,6 @@ export const BOOTHS = [
   ] },
   { name: "Isle of Java", anchor: "ak-isle-java", where: "Discovery Island", note: "", drinks: [
     ["Macaw Specialty Beverage", "$6.59", "na", "Minute Maid Premium Lemonade, Fanta Cherry and Fanta Blue Raspberry"],
-    ["Hot Cocoa by Joffrey's", "$4.79", "na", "Large Hot Cocoa by Joffrey's 5.19"],
     ["Frozen Beverages", "$6.29", "na", "Coca-Cola, Minute Maid Premium Lemonade, Fanta Cherry or Fanta Blue Raspberry"],
     ["Vietnamese Iced Coffee", "$5.99", "coffee", "French-roasted Joffrey’s Coffee Cold Brew over Ice with Sweetened Condensed Milk"],
     ["Joffrey’s Coffee Cold Brew Coffee", "$5.79", "coffee", "French Roast or Joffrey’s Shakin’ Jamaican with Sweet Cream. Large Joffrey's Cold Brew Coffee with Sweet Cream 6.49"],
@@ -139,7 +137,6 @@ export const BOOTHS = [
     ["Irish Coffee", "$15.50", "cocktail", "Baileys Irish Cream Liqueur with Joffrey's Coffee French Roast of Joffrey's Coffee Cold Brew and Whipped Cream"],
   ] },
   { name: "Kusafiri Coffee Shop and Bakery", anchor: "ak-kusafiri-coffee-shop-bakery", where: "Africa", note: "", drinks: [
-    ["Hot Cocoa by Joffrey's", "$4.79", "na", "Large Hot Cocoa by Joffrey's 5.19"],
     ["African Coffee", "$15.50", "coffee", "with Amarula Cream Liqeur"],
     ["Coconut-flavored Iced Coffee", "$5.99", "coffee", "Joffrey's Cold Brew Coffee flavored with Coconut, Oat Milk, and a drizzle of Sweetened Condensed Milk"],
     ["Coconut-flavored Iced Coffee with Amarula Cream Liqueur", "$15.50", "cocktail", "Joffrey's Cold Brew Coffee flavored with Coconut, Oat Milk, and a drizzle of Sweetened Condensed Milk with Amarula Cream Liqueur"],
@@ -191,7 +188,7 @@ export const BOOTHS = [
     ["Blue Lagoon Lemonade", "$6.29", "na", "Minute Maid Lemonade, Citrus, and Gummy Worms"],
     ["Blue Lagoon with Rum", "$14.50", "cocktail", "Parrot Bay Coconut Rum, Minute Maid Lemonade, Citrus, and Gummy Worms"],
     ["Safari Amber - St. Louis, MO", "$12.50", "beer", "20-oz Draft - Red Lager with toasted notes of Caramel, Malt, and Hops"],
-    ["RAMONA Ruby Grapefruit Wine Spritz", "$11.75", "cocktail", ""],
+    ["RAMONA Ruby Grapefruit Wine Spritz", "$11.75", "wine", ""],
     ["Bud Light Lager - St. Louis, MO", "$10.00", "beer", "20-oz Draft - Golden-colored with flavors that are dry, clean, crisp, and refreshing with subtle bitterness"],
   ] },
   { name: "Pongu Pongu", anchor: "ak-pongu-pongu", where: "Pandora - The World of Avatar", note: "", drinks: [

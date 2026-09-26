@@ -61,6 +61,15 @@ export const ANCHORS = (() => {
 
 export const ANCHOR_IDS = Object.keys(ANCHORS);
 
+// EPCOT's four neighborhoods, for the map's ground colors. seeds: the spots that sit in each one.
+export const REGIONS = [
+  { id: "world-showcase", name: "World Showcase", tint: "#f3ddb2", ink: "#a8741f",
+    seeds: [...RING, ...RING.slice(0, -1).map((id, i) => `${id}-${RING[i + 1]}`), "showcase-plaza", "plaza-mexico-side", "plaza-canada-side", "port-of-entry", "disney-traders"] },
+  { id: "world-celebration", name: "World Celebration", tint: "#d2d9ef", ink: "#4d5b9a", seeds: ["spaceship-earth", "communicore", "connections", "creations"] },
+  { id: "world-discovery", name: "World Discovery", tint: "#cdc6f0", ink: "#5a4db8", seeds: ["test-track", "mission-space", "guardians", "odyssey", "east-walkway"] },
+  { id: "world-nature", name: "World Nature", tint: "#c4e5b8", ink: "#3f7d42", seeds: ["the-land", "imagination", "seas", "culinary-corridor"] },
+];
+
 // Countries a drink can belong to. Festival "countries" beyond the 11 pavilions
 // come and go, so this list is generous. "park" = not tied to a country.
 export const COUNTRIES = [

@@ -50,6 +50,8 @@ const state = {
   watching: false,
   filters: { group: "all", only: "all", fest: true, yr: true, q: "", sort: "walk" },
   filtersOpen: false,
+  spotQ: "",                 // drawer search inside a spot
+  spotBooth: null,           // drawer: show just this bar/stand
 };
 
 // ── API ────────────────────────────────────────────────────────────────────
@@ -71,6 +73,7 @@ async function load({ quiet = false } = {}) {
     const data = await api("state");
     state.data = data;
     state.offline = false;
+    state.fresh = true;
     ls.set(LS.cache, data);
   } catch (e) {
     state.offline = true;
@@ -117,6 +120,17 @@ const PARK_FALLBACK = { id: "epcot", name: "EPCOT", short: "EPCOT", walk: null, 
 const PK = (id = state.park) => D()?.parks?.[id] || PARK_FALLBACK;
 const parkList = () => Object.values(D()?.parks || { epcot: PARK_FALLBACK });
 const walkOrder = () => (state.park === "epcot" ? WALK : PK().walk || []);
+// Lands (EPCOT: its four neighborhoods) each have a ground tint and an accent ink.
+let regionIndex = null, regionIndexFor = null;
+function regionOf(anchorId) {
+  if (regionIndexFor !== D()) {
+    regionIndex = {};
+    for (const p of parkList()) for (const r of p.regions || []) { regionIndex[r.id] = r; for (const id of r.seeds) regionIndex[id] ||= r; }
+    regionIndexFor = D();
+  }
+  return regionIndex[anchorId] || null;
+}
+const landStyle = (anchorId) => { const r = regionOf(anchorId); return r ? `style="--land:${r.ink}"` : ""; };
 const anchorOf = (id) => D().anchors[id];
 const drinkById = (id) => D().drinks.find((d) => d.id === id);
 
@@ -241,7 +255,11 @@ function renderHeader() {
 // ── Render root ───────────────────────────────────────────────────────────
 function render() {
   if (!D()) return;
-  if (!D().parks?.[state.park]) state.park = "epcot";   // older cached data, or a park that went away
+  if (!D().parks?.[state.park]) {
+    // The saved copy may predate a park; wait for fresh data before giving up on the choice.
+    if (!state.fresh) return;
+    state.park = "epcot";
+  }
   applyTheme();
   document.body.dataset.tab = state.tab;
   document.body.dataset.drawer = state.drawer;
@@ -354,8 +372,33 @@ function applySky() {
 }
 setInterval(applySky, 60000);
 
+// Land colors on the ground: each land's spots claim the ground around them (up to R meters),
+// split from neighboring lands along the halfway line between spots (a clipped Voronoi diagram).
+const TINT_R = { epcot: 160, mk: 110, hs: 100, ak: 140, tl: 90, bb: 80 };
+function clipHalf(poly, a, b) {
+  const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, nx = b.x - a.x, ny = b.y - a.y;
+  const side = (p) => (p.x - mx) * nx + (p.y - my) * ny;   // <= 0: closer to a
+  const out = [];
+  for (let i = 0; i < poly.length; i++) {
+    const p = poly[i], q = poly[(i + 1) % poly.length], sp = side(p), sq = side(q);
+    if (sp <= 0) out.push(p);
+    if ((sp < 0) !== (sq < 0) && sp !== sq) { const t = sp / (sp - sq); out.push({ x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t }); }
+  }
+  return out;
+}
+function landTintPaths(regions, P, R) {
+  const seeds = regions.flatMap((r, ri) => r.seeds.filter((id) => P[id]).map((id) => ({ p: P[id], ri })));
+  const d = regions.map(() => "");
+  for (const s of seeds) {
+    let cell = Array.from({ length: 28 }, (_, k) => ({ x: s.p.x + Math.cos(k / 28 * 2 * Math.PI) * R, y: s.p.y + Math.sin(k / 28 * 2 * Math.PI) * R }));
+    for (const o of seeds) if (o.ri !== s.ri && Math.hypot(o.p.x - s.p.x, o.p.y - s.p.y) < 2 * R) cell = clipHalf(cell, s.p, o.p);
+    if (cell.length > 2) d[s.ri] += "M" + cell.map((q) => `${q.x.toFixed(1)} ${q.y.toFixed(1)}`).join("L") + "Z";
+  }
+  return d;
+}
+
 // Hero landmarks are drawn into the map itself, at world scale on their real footprint.
-const HERO_GLOW = { se: ["#e9f0ff", "#9d8cff", "#5a4dff", 70], castle: ["#fff3f8", "#f29ac4", "#7a6cff", 80], tower: ["#e8ffe0", "#9fd28a", "#3f7a55", 60], tree: ["#fff4d6", "#ffc46a", "#ff8a3c", 75] };
+const HERO_GLOW = { se: ["#e9f0ff", "#9d8cff", "#5a4dff", 70], castle: ["#fff3f8", "#f29ac4", "#7a6cff", 80], tower: ["#e8ffe0", "#9fd28a", "#3f7a55", 60], tree: ["#fff4d6", "#ffc46a", "#ff8a3c", 75], boat: ["#fff4d6", "#ffb36a", "#ff6a3c", 55], ski: ["#f2fbff", "#9ad8f2", "#3f8fc4", 60] };
 
 function buildMap() {
   const A = D().anchors, M = MAP.layers;
@@ -415,12 +458,25 @@ function buildMap() {
   fill(M.water, { fill: "none", stroke: "var(--shore)", "stroke-width": 3 });
   fill(M.water, { fill: "url(#lagoonG)", "fill-rule": "evenodd" });
   line(M.canal, 3, "var(--water)");
+  // Water slides: a dark rim and a bright tube
+  line(M.slide, 3.2, "#1f5f86"); line(M.slide, 1.8, "#6fd0ee");
   // Walkways over the gardens: a thin edge, then the pavement.
   line(M.walkW, 10, "var(--pave-edge)"); line(M.walk, 4.6, "var(--pave-edge)"); line(M.path, 3, "var(--pave-edge)");
   line(M.walkW, 8.6, "var(--pave)"); line(M.walk, 3.4, "var(--pave)"); line(M.path, 2, "var(--pave)");
   fill(M.plaza, { fill: "var(--pave)" });
   line(M.pier, 2.5, "#b48a5a");
   fill(M.bridge, { fill: "var(--pave)", stroke: "var(--pave-edge)", "stroke-width": .8 });
+  // Each land's ground color: soft-edged washes over paths and gardens (not water), under the buildings.
+  const regions = PK().regions || [];
+  if (regions.length) {
+    const mask = el("mask", { id: "landMask", maskUnits: "userSpaceOnUse", ...cover }, defs);
+    el("path", { d: M.park, fill: "#fff" }, mask);
+    if (M.water) el("path", { d: M.water, fill: "#000", "fill-rule": "evenodd" }, mask);
+    defs.insertAdjacentHTML("beforeend", `<filter id="tintBlur" x="-5%" y="-5%" width="110%" height="110%"><feGaussianBlur stdDeviation="5"/></filter>`);
+    const tint = el("g", { class: "land-tint", mask: "url(#landMask)" }, world);
+    const soft = el("g", { filter: "url(#tintBlur)" }, tint);
+    landTintPaths(regions, P, TINT_R[state.park] || 110).forEach((d, i) => d && el("path", { d, fill: regions[i].tint, stroke: regions[i].tint, "stroke-width": 2 }, soft));
+  }
   // Buildings with a soft drop shadow; rides/shows get a warmer roof.
   const bshadow = [M.bld, M.attr, M.glass].filter(Boolean).join("");
   fill(bshadow, { fill: "#1d2a17", opacity: .22, transform: "translate(1.6 2.2)" });
@@ -521,7 +577,9 @@ const isBig = (a) => a?.kind === "pavilion" || a?.kind === "land";
 function venueShown(id, S) {
   const a = anchorOf(id);
   if (a.kind !== "venue") return !!S[id];
-  return !!S[id] && (zoomK() >= VENUE_ZOOM || state.sel === id || state.sel === a.land);
+  // small parks (the water parks) show every stand right away
+  const few = Object.values(D().anchors).filter((x) => x.park === state.park && x.kind === "venue").length <= 10;
+  return !!S[id] && (few || zoomK() >= VENUE_ZOOM || state.sel === id || state.sel === a.land);
 }
 
 function renderMarkers() {
@@ -553,7 +611,8 @@ function renderMarkers() {
     if (isPav) {
       const name = a.short || a.name.replace("The American Adventure", "America").replace("United Kingdom", "U.K.");
       const w = name.length * 5.6 + 14;
-      html += `<div class="${cls}" data-anchor="${id}" data-kind="pav" ${pos} data-ox="40" data-oy="36" style="transform-origin:40px 36px">
+      const ink = a.kind === "land" ? regionOf(id)?.ink : null;
+      html += `<div class="${cls}" data-anchor="${id}" data-kind="pav" ${pos} data-ox="40" data-oy="36" style="transform-origin:40px 36px${ink ? `;--land:${ink}` : ""}">
         <svg width="80" height="66" viewBox="-40 -36 80 66">
         <circle r="30" cy="-4" class="hit"/>
         <circle r="25" cy="-6" class="sel-ring"/>
@@ -569,7 +628,8 @@ function renderMarkers() {
         ? `<svg class="pin-flag" x="-9" y="-25" width="18" height="12" viewBox="0 0 30 20" preserveAspectRatio="xMidYMid slice">${flagBody(first.country)}</svg>`
         : `<svg class="pin-flag" x="-7.5" y="-26.5" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="${iconPath(typeIcon(s.all))}"/></svg>`;
       const names = [...new Set(s.all.map((d) => d.booth))];
-      html += `<div class="${cls}" data-anchor="${id}" data-kind="pin" ${pos} data-ox="40" data-oy="44" style="transform-origin:40px 44px">
+      const ink = a.kind === "venue" ? regionOf(a.land)?.ink : null;
+      html += `<div class="${cls}" data-anchor="${id}" data-kind="pin" ${pos} data-ox="40" data-oy="44" style="transform-origin:40px 44px${ink ? `;--land:${ink}` : ""}">
         <svg width="80" height="64" viewBox="-40 -44 80 64">
         <circle r="20" cy="-16" class="hit"/>
         <ellipse cx="0" cy="0" rx="5" ry="2" fill="#000" opacity=".3"/>
@@ -863,6 +923,7 @@ function initPanZoom() {
 function zoomBy(f) { if (view) flyTo(zoomAbout(view, stageSize.W / 2, stageSize.H * 0.42, f), 280); }
 
 function selectSpot(id) {
+  if (state.sel !== id) { state.spotQ = ""; state.spotBooth = null; }
   state.sel = id;
   state.drawer = "half";
   render();
@@ -940,24 +1001,50 @@ function renderDrawer() {
   const S = spots()[state.sel] || { all: [], vis: [] };
   const list = S.vis.length ? S.vis : [];
   const hidden = S.all.length - S.vis.length;
+  const booths = spotBooths(list);
+  const mins = walkMins(state.sel);
+  // Busy spots (a whole land, a big restaurant) get a search box and a chip per bar/stand.
+  const tools = list.length > 8;
+  body.innerHTML = `
+    <div class="spot-head" ${landStyle(state.sel)}>${spotArt(state.sel, list.length ? list : S.all)}<div><h2>${esc(a.name)}</h2>
+      <p>${list.length} drink${list.length === 1 ? "" : "s"}${booths.length > 1 ? ` at ${booths.length} spots` : ""}${hidden > 0 ? ` · ${hidden} hidden by filters` : ""}${mins ? ` · ${icon("walk")} ~${mins} min` : ""}</p></div>
+      <button class="x" data-closespot aria-label="Close">${icon("close")}</button></div>
+    ${tools ? `<div class="spot-tools" ${landStyle(state.sel)}>
+      <div class="search-wrap sm">${icon("search")}<input class="search" id="spotQ" type="search" placeholder="Find a drink here…" value="${esc(state.spotQ)}" autocomplete="off" /></div>
+      ${booths.length > 1 ? `<div class="booth-chips">${booths.map((b) => `<button class="bchip ${state.spotBooth === b.name ? "on" : ""}" data-sbooth="${esc(b.name)}">${esc(b.name)}<small>${b.drinks.length}</small></button>`).join("")}</div>` : ""}
+    </div>` : ""}
+    <div id="spotList">${spotListHTML(booths, hidden)}</div>
+    <button class="btn block log-here" data-log-here>${icon("plus")}Had something not listed here?</button>`;
+}
+function spotBooths(list) {
   const booths = [];
   for (const d of list) {
     let b = booths.find((x) => x.name === d.booth);
     if (!b) booths.push((b = { name: d.booth, where: d.where, note: d.note, yr: d.yearRound && parkOf(d) === "epcot", anchor: d.anchor, closes: d.closes, drinks: [] }));
     b.drinks.push(d);
   }
-  const mins = walkMins(state.sel);
-  body.innerHTML = `
-    <div class="spot-head">${spotArt(state.sel, list.length ? list : S.all)}<div><h2>${esc(a.name)}</h2>
-      <p>${list.length} drink${list.length === 1 ? "" : "s"}${hidden > 0 ? ` · ${hidden} hidden by filters` : ""}${mins ? ` · ${icon("walk")} ~${mins} min` : ""}</p></div>
-      <button class="x" data-closespot aria-label="Close">${icon("close")}</button></div>
-    ${booths.map((b) => `
+  return booths;
+}
+// The drink list inside the drawer, narrowed by the drawer's search box and bar/stand chip.
+function spotListHTML(booths, hidden) {
+  const q = state.spotQ.trim().toLowerCase();
+  const match = (d) => !q || `${d.name} ${d.desc} ${d.booth} ${TYPE_LABEL[d.type] || d.type}`.toLowerCase().includes(q);
+  const shown = booths.filter((b) => !state.spotBooth || b.name === state.spotBooth)
+    .map((b) => ({ ...b, drinks: b.drinks.filter(match) })).filter((b) => b.drinks.length);
+  if (!shown.length) {
+    const msg = q || state.spotBooth ? `Nothing here matches${q ? ` "${esc(state.spotQ.trim())}"` : ""}.` : hidden ? "Nothing here matches your filters." : "No drinks listed here right now.";
+    return `<div class="empty"><div class="e">${icon(q ? "search" : "glass")}</div><p>${msg}</p></div>`;
+  }
+  return shown.map((b) => `
       <p class="booth-name">${esc(b.name)}${b.yr ? ' <span class="chip">Year-round</span>' : ""}${b.anchor !== state.sel && anchorOf(b.anchor)?.kind === "venue" ? `<button class="linkbtn" data-jump="${esc(b.anchor)}">${icon("map")}Map</button>` : ""}</p>
-      ${b.where ? `<p class="booth-where">${icon("pin")}${esc(b.where)}</p>` : ""}
+      ${b.where && b.where !== anchorOf(state.sel)?.name ? `<p class="booth-where">${icon("pin")}${esc(b.where)}</p>` : ""}
       ${b.note ? `<div class="note">${esc(b.note)}</div>` : ""}
-      <div class="drinks">${b.drinks.map((d) => drinkCard(d)).join("")}</div>`).join("")
-    || `<div class="empty"><div class="e">${icon("glass")}</div><p>${hidden ? "Nothing here matches your filters." : "No drinks listed here right now."}</p></div>`}
-    <button class="btn block log-here" data-log-here>${icon("plus")}Had something not listed here?</button>`;
+      <div class="drinks">${b.drinks.map((d) => drinkCard(d)).join("")}</div>`).join("");
+}
+function refreshSpotList() {
+  const S = spots()[state.sel] || { all: [], vis: [] };
+  const el = $("#spotList");
+  if (el) el.innerHTML = spotListHTML(spotBooths(S.vis), S.all.length - S.vis.length);
 }
 
 // ── Geolocation ───────────────────────────────────────────────────────────
@@ -1053,7 +1140,7 @@ function renderList() {
       const a = anchorOf(k) || { name: k };
       const ds = groups[k];
       const mins = walkMins(k);
-      return `<div class="stop-head">${spotArt(k, ds)}<div><h3>${esc(a.name)}</h3><small>${ds.length} drink${ds.length > 1 ? "s" : ""}${mins ? ` · ${icon("walk")} ~${mins} min` : ""}</small></div>
+      return `<div class="stop-head" ${state.park !== "epcot" ? landStyle(anchorOf(k)?.land || k) : ""}>${spotArt(k, ds)}<div><h3>${esc(a.name)}</h3><small>${ds.length} drink${ds.length > 1 ? "s" : ""}${mins ? ` · ${icon("walk")} ~${mins} min` : ""}</small></div>
         <button class="btn icon ghost push" data-jump="${esc(k)}" aria-label="Show on map">${icon("map")}</button></div>
         <div class="drinks">${ds.map((d) => drinkCard(d)).join("")}</div>`;
     }).join("")}</div>`;
@@ -1521,7 +1608,7 @@ function infoSheet() {
   const prompt = admin.prompts?.[ap] || admin.prompt;
   openSheet(`
     <h2>Settings</h2>
-    <div class="seg park-seg">${parkList().map((p) => `<button class="${p.id === ap ? "on" : ""}" data-apark="${p.id}">${esc(p.short.replace("Hollywood Studios", "Hollywood").replace("Animal Kingdom", "Animal K.").replace("Magic Kingdom", "Magic K."))}</button>`).join("")}</div>
+    <div class="seg park-seg">${parkList().map((p) => `<button class="${p.id === ap ? "on" : ""}" data-apark="${p.id}">${esc(p.short.replace("Hollywood Studios", "Hollywood").replace("Animal Kingdom", "Animal K.").replace("Magic Kingdom", "Magic K.").replace(" Lagoon", "").replace(" Beach", ""))}</button>`).join("")}</div>
     <p class="group-label">${icon("info")}${esc(PK(ap).short)} menu</p>
     <dl class="kv">
       ${epcot ? `<dt>Festival</dt><dd>${f?.name ? `${esc(f.name)}<br><span class="muted">${fmtDate(f.starts)} – ${fmtDate(f.ends)}${f.active ? "" : " (not running today)"}</span>` : "None running today"}</dd>
@@ -1709,12 +1796,14 @@ function parksSheet() {
   openSheet(`
     <h2>Pick a park</h2>
     <p class="muted">Every park has its own map and menu. Family check-ins, the tab and passports cover all of them.</p>
-    <div class="park-list">${parkList().map((p) => `
+    ${[["Theme parks", parkList().filter((p) => !p.water)], ["Water parks", parkList().filter((p) => p.water)]].filter(([, ps]) => ps.length).map(([title, ps]) => `
+    <p class="group-label">${esc(title)}</p>
+    <div class="park-list">${ps.map((p) => `
       <button class="park-card ${p.id === state.park ? "on" : ""}" data-park="${p.id}">
         <span class="park-art"><svg viewBox="-25 -29 50 41" aria-hidden="true">${parkGlyph(p.id)}</svg></span>
         <span class="park-txt"><b>${esc(p.short)}</b><small>${count(p.id)} drinks${p.festivals && D().festival?.active ? ` · ${esc(shortFest(D().festival.name))}` : ""}${tried.has(p.id) ? " · family has sipped here" : ""}</small></span>
         ${p.id === state.park ? `<span class="chip">Showing</span>` : icon("chevron", "go")}
-      </button>`).join("")}</div>`, (el) => {
+      </button>`).join("")}</div>`).join("")}`, (el) => {
     el.querySelectorAll("[data-park]").forEach((b) => b.addEventListener("click", () => { closeSheet(); setPark(b.dataset.park); }));
   });
 }
@@ -1736,6 +1825,12 @@ document.addEventListener("click", (ev) => {
   if (t.hasAttribute("data-closespot")) { state.sel = null; state.drawer = "peek"; render(); return; }
   if (t.hasAttribute("data-join")) return joinSheet();
   if (t.hasAttribute("data-parks")) return parksSheet();
+  if (t.dataset.sbooth !== undefined) {
+    state.spotBooth = state.spotBooth === t.dataset.sbooth ? null : t.dataset.sbooth;
+    document.querySelectorAll("[data-sbooth]").forEach((b) => b.classList.toggle("on", b.dataset.sbooth === state.spotBooth));
+    refreshSpotList();
+    return;
+  }
   if (t.hasAttribute("data-log-here")) return addSheet({ log: true });
   if (t.dataset.brange) { state.buzzRange = t.dataset.brange; render(); return; }
   if (t.hasAttribute("data-ftoggle")) return setFiltersOpen(!state.filtersOpen);
@@ -1774,6 +1869,7 @@ document.addEventListener("click", (ev) => {
   }
 });
 document.addEventListener("input", (ev) => {
+  if (ev.target.id === "spotQ") { state.spotQ = ev.target.value; refreshSpotList(); return; }
   if (ev.target.id === "q") {
     state.filters.q = ev.target.value;
     const pos = ev.target.selectionStart;
@@ -1799,7 +1895,7 @@ document.querySelectorAll("[data-icon]").forEach((b) => b.insertAdjacentHTML("af
 state.filtersOpen = ls.get(LS.fopen, false);
 
 setInterval(() => {
-  if (document.visibilityState !== "visible" || !$("#sheet").hidden || document.activeElement?.id === "q") return;
+  if (document.visibilityState !== "visible" || !$("#sheet").hidden || ["q", "spotQ"].includes(document.activeElement?.id)) return;
   load({ quiet: true });
 }, 30000);
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { applySky(); load({ quiet: true }); } });

@@ -115,13 +115,16 @@ input, select, textarea { font: inherit; color: inherit; }
 .brand { flex: none; width: 34px; height: 34px; display: grid; place-items: center; border: 1.5px solid var(--brass); color: var(--brass); }
 .brand svg { width: 24px; height: 24px; }
 /* Park switcher: the current park's landmark on a light plate, with a chevron */
-.park-btn { width: auto; height: 42px; padding: 0 3px 0 2px; display: flex; align-items: center; gap: 1px; background: #fbf7ec; border-radius: var(--r); }
+/* Park landmarks sit on a dusk-sky plate with a light halo, so pale ones (Spaceship Earth, the castle) still read. */
+.park-btn, .park-art { background: radial-gradient(120% 90% at 50% 100%, #3d5f93 0%, #22365c 55%, #151f38 100%); }
+.park-btn svg, .park-art svg { filter: drop-shadow(0 0 .6px #fff) drop-shadow(0 0 1.4px rgba(255,255,255,.55)); }
+.park-btn { width: auto; height: 42px; padding: 0 3px 0 2px; display: flex; align-items: center; gap: 1px; border-color: var(--brass); border-radius: var(--r); }
 .park-btn svg { width: 38px; height: 32px; }
-.park-btn .chev { width: 13px; height: 13px; color: #6b5a33; stroke-width: 2.4; }
+.park-btn .chev { width: 13px; height: 13px; color: #f3efe6; stroke-width: 2.4; }
 .park-list { display: grid; gap: 8px; margin-top: 12px; }
 .park-card { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; background: var(--surface-2); border: 1px solid var(--line); border-left: 4px solid var(--line-2); border-radius: var(--r); padding: 8px 12px 8px 8px; color: var(--ink); }
 .park-card.on { border-left-color: var(--accent); background: var(--surface); }
-.park-art { width: 64px; height: 52px; flex: none; display: grid; place-items: center; background: #fbf7ec; border: 1px solid var(--line); }
+.park-art { width: 64px; height: 52px; flex: none; display: grid; place-items: center; border: 1px solid var(--line); }
 .park-art svg { width: 58px; height: 48px; }
 .park-txt { flex: 1; min-width: 0; }
 .park-txt b { display: block; font-family: var(--display); font-size: 1.15rem; letter-spacing: .04em; text-transform: uppercase; line-height: 1.05; }
@@ -175,7 +178,7 @@ body[data-sky="night"] .map-view { background: #1a2433; }
 .marker .hit { fill: transparent; }
 .marker.dim .art { opacity: .5; filter: saturate(.25); }
 .marker.dim .plate-bg { fill: #6b6f73; }
-.marker .plate-bg { fill: var(--chrome); }
+.marker .plate-bg { fill: var(--land, var(--chrome)); }
 .marker .plate-t { fill: #f3efe6; font-weight: 700; font-size: 9.5px; letter-spacing: .08em; text-anchor: middle; dominant-baseline: central; text-transform: uppercase; }
 .marker.sel .plate-bg { fill: var(--accent); }
 .marker .sel-ring { display: none; fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 3; transform-box: fill-box; transform-origin: center; animation: spin 14s linear infinite; }
@@ -185,7 +188,7 @@ body[data-sky="night"] .map-view { background: #1a2433; }
 .marker .tag.soon { fill: var(--accent-2); }
 .marker .tag-t { fill: #fff; font-size: 10px; font-weight: 800; text-anchor: middle; dominant-baseline: central; }
 .marker .tried-tag { fill: var(--ok); stroke: #fff; stroke-width: 1.2; }
-.marker .pin-body { fill: var(--chrome); stroke: #fff; stroke-width: 1.4; }
+.marker .pin-body { fill: var(--land, var(--chrome)); stroke: #fff; stroke-width: 1.4; }
 .marker.sel .pin-body { fill: var(--accent); }
 .marker.tried .pin-body { stroke: #7fe0a8; }
 .marker.dim .pin-body { fill: #6b6f73; }
@@ -262,6 +265,20 @@ body[data-drawer="half"] .scale, body[data-drawer="full"] .scale, body[data-draw
 .drawer-grip::before { content: ""; display: block; width: 36px; height: 4px; background: var(--line-2); margin: 0 auto; }
 .drawer-body { overflow-y: auto; padding: 0 14px 18px; flex: 1; overscroll-behavior: contain; }
 .spot-head { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.spot-head[style*="--land"] { border-left: 4px solid var(--land); padding-left: 10px; }
+.spot-head[style*="--land"] .spot-art { background: color-mix(in srgb, var(--land) 14%, var(--surface-2)); }
+/* Map ground colors per land (multiplied onto paths and gardens) */
+#map .land-tint { mix-blend-mode: multiply; opacity: .62; pointer-events: none; }
+/* Drawer search + one chip per bar/stand, for busy lands */
+.spot-tools { position: sticky; top: -2px; z-index: 2; background: var(--surface); padding: 4px 0 8px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
+.search-wrap.sm { margin-bottom: 6px; }
+.search-wrap.sm .search { padding-top: 9px; padding-bottom: 9px; font-size: .95rem; }
+.booth-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+.booth-chips::-webkit-scrollbar { display: none; }
+.bchip { flex: none; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink-2); border-radius: 999px; padding: 6px 11px; font-family: var(--display); font-weight: 700; font-size: .8rem; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+.bchip small { font-family: var(--body); font-weight: 700; font-size: .7rem; color: var(--ink-3); }
+.bchip.on { background: var(--land, var(--accent)); border-color: var(--land, var(--accent)); color: #fff; }
+.bchip.on small { color: rgba(255,255,255,.8); }
 .spot-art { width: 48px; height: 48px; flex: none; background: var(--surface-2); border: 1px solid var(--line); display: grid; place-items: center; }
 .spot-art svg { width: 44px; height: 44px; }
 .spot-art .flag { width: 36px; height: 24px; }
@@ -289,6 +306,7 @@ body[data-tab="map"] .view { display: none; }
 .stop { position: relative; padding-left: 30px; }
 .stop::before { content: ""; position: absolute; left: 10px; top: 0; bottom: 0; width: 2px; background: repeating-linear-gradient(var(--ink-3) 0 5px, transparent 5px 10px); opacity: .6; }
 .stop-head { display: flex; align-items: center; gap: 10px; margin: 22px 0 10px; position: relative; }
+.stop-head[style*="--land"] h3 { color: var(--land); }
 .stop-head::before { content: ""; position: absolute; left: -25px; width: 12px; height: 12px; background: var(--bg); border: 2.5px solid var(--accent); transform: rotate(45deg); }
 .stop-head .spot-art { width: 44px; height: 44px; }
 .stop-head .spot-art svg { width: 40px; height: 40px; }

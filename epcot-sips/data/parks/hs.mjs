@@ -7,14 +7,14 @@ export const CHECKED = "2026-09-25";
 export const SOURCES = ["https://touringplans.com/hollywood-studios/dining"];
 
 export const LANDS = {
-  "hs-hollywood-boulevard": {"name": "Hollywood Boulevard", "short": "Hollywood Blvd", "lat": 28.35815, "lng": -81.5593},
-  "hs-sunset-boulevard": {"name": "Sunset Boulevard", "short": "Sunset Blvd", "lat": 28.35925, "lng": -81.55985},
-  "hs-echo-lake": {"name": "Echo Lake", "short": "Echo Lake", "lat": 28.357, "lng": -81.5588},
-  "hs-grand-avenue": {"name": "Grand Avenue", "short": "Grand Avenue", "lat": 28.3554, "lng": -81.55935},
-  "hs-commissary-lane": {"name": "Commissary Lane", "short": "Commissary Ln", "lat": 28.356, "lng": -81.56005},
-  "hs-pixar-plaza": {"name": "Pixar Plaza", "short": "Pixar Plaza", "lat": 28.35675, "lng": -81.561},
-  "hs-toy-story-land": {"name": "Toy Story Land", "short": "Toy Story Land", "lat": 28.35587, "lng": -81.5622},
-  "hs-galaxys-edge": {"name": "Star Wars: Galaxy's Edge", "short": "Galaxy's Edge", "lat": 28.35395, "lng": -81.5619},
+  "hs-hollywood-boulevard": {"name": "Hollywood Boulevard", "short": "Hollywood Blvd", "lat": 28.35815, "lng": -81.5593, "tint": "#f3d79c", "ink": "#a8741f"},
+  "hs-sunset-boulevard": {"name": "Sunset Boulevard", "short": "Sunset Blvd", "lat": 28.35925, "lng": -81.55985, "tint": "#f5b9a3", "ink": "#b54a35"},
+  "hs-echo-lake": {"name": "Echo Lake", "short": "Echo Lake", "lat": 28.357, "lng": -81.5588, "tint": "#b2e0e3", "ink": "#23808a"},
+  "hs-grand-avenue": {"name": "Grand Avenue", "short": "Grand Avenue", "lat": 28.3554, "lng": -81.55935, "tint": "#dcbca2", "ink": "#8a4a31"},
+  "hs-commissary-lane": {"name": "Commissary Lane", "short": "Commissary Ln", "lat": 28.356, "lng": -81.56005, "tint": "#d0d4dc", "ink": "#4d5866"},
+  "hs-pixar-plaza": {"name": "Pixar Plaza", "short": "Pixar Plaza", "lat": 28.35675, "lng": -81.561, "tint": "#f7e59a", "ink": "#9a7a12"},
+  "hs-toy-story-land": {"name": "Toy Story Land", "short": "Toy Story Land", "lat": 28.35587, "lng": -81.5622, "tint": "#f6c98e", "ink": "#c0612a"},
+  "hs-galaxys-edge": {"name": "Star Wars: Galaxy's Edge", "short": "Galaxy's Edge", "lat": 28.35395, "lng": -81.5619, "tint": "#dcc6a6", "ink": "#6e5a40"},
 };
 
 export const VENUES = {

@@ -1,7 +1,7 @@
 // Minimal service worker: keeps the app shell available when park Wi-Fi is spotty.
 // API calls always go to the network (the app falls back to its own cached copy).
-const CACHE = "epcot-sips-v15";
-const SHELL = ["/", "/index.html", "/styles.css", "/app.js", "/icons.js", "/maps/epcot.js", "/maps/mk.js", "/maps/hs.js", "/maps/ak.js", "/manifest.webmanifest", "/icon.svg"];
+const CACHE = "epcot-sips-v16";
+const SHELL = ["/", "/index.html", "/styles.css", "/app.js", "/icons.js", "/maps/epcot.js", "/maps/mk.js", "/maps/hs.js", "/maps/ak.js", "/maps/tl.js", "/maps/bb.js", "/manifest.webmanifest", "/icon.svg"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

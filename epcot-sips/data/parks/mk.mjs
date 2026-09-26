@@ -7,12 +7,12 @@ export const CHECKED = "2026-09-25";
 export const SOURCES = ["https://touringplans.com/magic-kingdom/dining"];
 
 export const LANDS = {
-  "mk-main-street": {"name": "Main Street, U.S.A.", "short": "Main Street", "lat": 28.4174, "lng": -81.58112},
-  "mk-adventureland": {"name": "Adventureland", "short": "Adventureland", "lat": 28.41832, "lng": -81.58355},
-  "mk-frontierland": {"name": "Frontierland", "short": "Frontierland", "lat": 28.41925, "lng": -81.5847},
-  "mk-liberty-square": {"name": "Liberty Square", "short": "Liberty Square", "lat": 28.41955, "lng": -81.58247},
-  "mk-fantasyland": {"name": "Fantasyland", "short": "Fantasyland", "lat": 28.42085, "lng": -81.5803},
-  "mk-tomorrowland": {"name": "Tomorrowland", "short": "Tomorrowland", "lat": 28.4188, "lng": -81.5788},
+  "mk-main-street": {"name": "Main Street, U.S.A.", "short": "Main Street", "lat": 28.4174, "lng": -81.58112, "tint": "#f6c9a8", "ink": "#b5462f"},
+  "mk-adventureland": {"name": "Adventureland", "short": "Adventureland", "lat": 28.41832, "lng": -81.58355, "tint": "#bfe09a", "ink": "#3f7d32"},
+  "mk-frontierland": {"name": "Frontierland", "short": "Frontierland", "lat": 28.41925, "lng": -81.5847, "tint": "#efbc88", "ink": "#a8552a"},
+  "mk-liberty-square": {"name": "Liberty Square", "short": "Liberty Square", "lat": 28.41955, "lng": -81.58247, "tint": "#c8d4ee", "ink": "#3d5a8f"},
+  "mk-fantasyland": {"name": "Fantasyland", "short": "Fantasyland", "lat": 28.42085, "lng": -81.5803, "tint": "#f5c2dc", "ink": "#b8406e"},
+  "mk-tomorrowland": {"name": "Tomorrowland", "short": "Tomorrowland", "lat": 28.4188, "lng": -81.5788, "tint": "#a9d8ee", "ink": "#2a6f9e"},
 };
 
 export const VENUES = {

@@ -280,9 +280,29 @@ const SPHERE = `${shadow(12)}
     <circle cy="-8" r="13" fill="#d7dce2" ${O}/>
     <path d="M-12-12h24M-13-6h26M-11 0h22M-6-20.5 6 4M6-20.5-6 4M-12-14 0 5M12-14 0 5" stroke="#9aa3ad" stroke-width=".5"/>
     <circle cx="-4" cy="-13" r="4" fill="#fff" opacity=".6"/>`;
-const HERO = { castle: CASTLE, tower: TOWER, tree: TREE };
+// Typhoon Lagoon: Miss Tilly, the shrimp boat stuck on top of Mount Mayday.
+const BOAT = `${shadow(19)}
+    <path d="M-19 8-9-10-3-7 4-13 19 8z" fill="#9c8a72" ${O}/>
+    <path d="M-15 8q4-9 7-14M8 8q-2-8-5-17" stroke="#8fd0dc" stroke-width="2" fill="none"/>
+    <path d="M-10 0l3 2M9 1l-3 2" stroke="#4f9a45" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M-11-15h20l-3 6h-15z" fill="#c4442f" ${O}/>
+    <path d="M-9-15v-4h8v4z" fill="#f4efe4" ${O}/><path d="M-7-18h1.6M-4-18h1.6" stroke="#2a241e" stroke-width="1"/>
+    <path d="M4-15V-25" stroke="#6b4a2f" stroke-width="1.1"/><path d="M4-24l5 1.5-5 1.5" fill="#f2c94c"/>
+    <path d="M-11-11h17" stroke="#f4efe4" stroke-width=".8"/>
+    <path d="M-2-13 0-7M1-13l2 6" stroke="#fff" stroke-width=".7" opacity=".8"/>`;
+// Blizzard Beach: snowy Mount Gushmore with its ski jump and chairlift.
+const SKI = `${shadow(19)}
+    <path d="M-19 8-3-19 19 8z" fill="#c9b79a" ${O}/>
+    <path d="M-10.5-4-3-19 4.5-5-1-7-4-3-7-6z" fill="#fbfbfd" ${O}/>
+    <path d="M-3-19 3-19 12 3" stroke="#6b4a2f" stroke-width="1.4" fill="none"/>
+    <path d="M-3-19v-3h6v3" fill="#c4442f" ${O}/>
+    <path d="M5-6q5 4 9 13" stroke="#3b63b8" stroke-width="2.2" fill="none"/>
+    <path d="M-17 1-3-14" stroke="#2a241e" stroke-width=".6" stroke-dasharray="1.2 1.4"/>
+    <path d="M-12-6v2h2v-2zM-7-11v2h2v-2z" fill="#e5484d"/>
+    <path d="M-19 8h38" stroke="#8fd0dc" stroke-width="1.6"/>`;
+const HERO = { castle: CASTLE, tower: TOWER, tree: TREE, boat: BOAT, ski: SKI };
 export const heroArt = (kind) => HERO[kind] || "";
-export const parkGlyph = (park) => ({ epcot: SPHERE, mk: CASTLE, hs: TOWER, ak: TREE })[park] || SPHERE;
+export const parkGlyph = (park) => ({ epcot: SPHERE, mk: CASTLE, hs: TOWER, ak: TREE, tl: BOAT, bb: SKI })[park] || SPHERE;
 
 // ── Land landmarks for Magic Kingdom, Hollywood Studios and Animal Kingdom ─────
 export const LAND_ART = {
@@ -435,6 +455,40 @@ export const LAND_ART = {
     <path d="M-10.5-.8V-3h6v2.2" fill="#c4442f" ${O}/>
     <path d="M-12-3Q-7.5-5-3-3L-7.5-6z" fill="#d6a741" ${O}/>
     <path d="M-9 8V5h3v3z" fill="#2a241e"/>`,
+  "tl-getaway-glen": `${shadow(18)}
+    <path d="M-19 8q9-4 19-1 10 3 19-1v2h-38z" fill="#e9dcbc" ${O}/>
+    <path d="M-8 8Q-6-4-10-14" stroke="#7a5337" stroke-width="1.8" fill="none"/>
+    <path d="M-10-14q-6-2-9 2 5-1 9-2zM-10-14q5-4 10-1-5 0-10 1zM-10-14q-1-6 3-9 0 5-3 9zM-10-14q4 2 6 7-3-4-6-7z" fill="#4f9a45" ${O}/>
+    <path d="M3 6l6-8 6 8" stroke="#c4442f" stroke-width="1.2" fill="none"/>
+    <path d="M1 -2q8-7 16 0z" fill="#f2c94c" ${O}/><path d="M9-9v7" stroke="#2a241e" stroke-width=".7"/>`,
+  "tl-hideaway-bay": `<path d="M-20 8q5-4 10 0t10 0 10 0 10 0v2h-40z" fill="#3f9cc4" ${O}/>
+    <path d="M-18 2q6-14 20-10 7 2 5 8-3-5-8-3 4 1 4 5-9-3-21 0z" fill="#8fd0dc" ${O}/>
+    <path d="M-14 0q5-9 14-7" stroke="#fff" stroke-width="1" fill="none"/>
+    <path d="M10 8V-8" stroke="#7a5337" stroke-width="1.4"/><path d="M10-8q-5-2-8 1 4-1 8-1zM10-8q4-3 8 0-4 0-8 0zM10-8q0-5 4-7-1 4-4 7z" fill="#4f9a45" ${O}/>`,
+  "tl-mount-mayday": `${shadow(19)}
+    <path d="M-19 8-8-14-2-9 5-18 19 8z" fill="#9c8a72" ${O}/>
+    <path d="M-12 8q3-10 6-17M6 8q-1-12-1-24" stroke="#8fd0dc" stroke-width="2.4" fill="none"/>
+    <path d="M-12 8q3-10 6-17" stroke="#fff" stroke-width=".6" fill="none"/>
+    <circle cx="-15" cy="-2" r="4" fill="#5f9448" ${O}/><circle cx="14" cy="0" r="4.5" fill="#5f9448" ${O}/>
+    <ellipse cx="0" cy="8" rx="9" ry="1.6" fill="#3f9cc4"/>`,
+  "bb-ski-village": `${shadow(18)}
+    <path d="M-15 8V-3h20V8z" fill="#8a5a36" ${O}/>
+    <path d="M-15 1h20M-15 5h20" stroke="#6b4a2f" stroke-width=".6"/>
+    <path d="M-18-3-5-14 8-3z" fill="#f4efe4" ${O}/><path d="M-18-3-5-14 8-3" stroke="#3b63b8" stroke-width="1.2" fill="none"/>
+    ${win([-12, -7.4, -2.8], 0, 2, 2.6, "#f2c94c")}
+    <path d="M12 8V-10M9-10h6" stroke="#6b4a2f" stroke-width="1.2"/><path d="M9.5-9l2.5 4 2.5-4" stroke="#c4442f" stroke-width="1" fill="none"/>
+    <path d="M-2 -9v-4h2.6v4z" fill="#6b4a2f"/>`,
+  "bb-mount-gushmore": `${shadow(19)}
+    <path d="M-19 8-3-19 19 8z" fill="#c9b79a" ${O}/>
+    <path d="M-10.5-4-3-19 4.5-5-1-7-4-3-7-6z" fill="#fbfbfd" ${O}/>
+    <path d="M-2-17q-1 12-10 25M1-17q3 12 10 25M-1-17q0 12 0 25" stroke="#3b63b8" stroke-width="1.4" fill="none"/>
+    <path d="M-2-17q-1 12-10 25" stroke="#e5484d" stroke-width="1.4" fill="none"/>`,
+  "bb-tikes-peak": `${shadow(16)}
+    <path d="M-16 8-4-8 3-3 8-9 17 8z" fill="#fbfbfd" ${O}/>
+    <path d="M-10 8q2-6 7-9" stroke="#e36a92" stroke-width="2" fill="none"/>
+    <path d="M4 8q1-6 4-12" stroke="#2f9a8a" stroke-width="2" fill="none"/>
+    <circle cx="-4" cy="-10.5" r="1.8" fill="#f2c94c" ${O}/>
+    <path d="M-17 8h34" stroke="#8fd0dc" stroke-width="1.6"/>`,
   "ak-dinoland": `${shadow(19)}
     <path d="M-17 7q-1-8 5-9h12q4-4 5-11 1-4 4-4 3 0 3 3t-3 3q-2 1-2 7 0 5-4 9l1 2h-3l-1-2h-8l-1 2h-3l-1-2q-3 2-4 2z" fill="#e0893a" ${O}/>
     <circle cx="10.6" cy="-12.2" r=".7" fill="#2a241e"/>
